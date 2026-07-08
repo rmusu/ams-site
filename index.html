@@ -76,6 +76,7 @@
       <a href="#portals">Portals</a>
       <a href="#engine">Allocation engine</a>
       <a href="#security">Security</a>
+      <a href="#demo">Live demo</a>
       <a href="#about">About</a>
     </nav>
     <a class="btn small" href="#contact">Book a demo</a>
@@ -90,7 +91,7 @@
     Built by people who ran it at the Olympic Games.</p>
     <div class="cta">
       <a class="btn" href="#contact">Book a demo</a>
-      <a class="btn ghost" href="#contact" title="Live demo environment">Try it live</a>
+      <a class="btn ghost" href="#demo" title="Live demo environment">Try it live</a>
     </div>
     <div class="trust">
       <div><b>Per-night</b>inventory ledger</div>
@@ -228,30 +229,32 @@
   </div>
 </section>
 
+<section class="alt" id="demo">
+  <div class="wrap" style="text-align:center">
+    <div class="kicker">Live demo</div>
+    <h2>Try the real product, not a video.</h2>
+    <p class="lead" style="margin:0 auto">The demo environment runs the full system — operations back-office,
+    client portal and supplier portal — loaded with a realistic Winter Games scenario.
+    Request your credentials and explore all three sides of the platform.</p>
+    <div style="display:flex; gap:14px; justify-content:center; flex-wrap:wrap; margin-top:30px">
+      <a class="btn" href="#contact">Request demo access</a>
+      <a class="btn" style="background:#fff; color:var(--navy); border:1.5px solid var(--line)"
+         href="https://104a4890-9d83-403b-b941-3bcb4296927e-00-1or2gk6q6dyhv.worf.replit.dev/" target="_blank" rel="noopener">Open the demo environment ↗</a>
+    </div>
+    <p style="font-size:13.5px; color:var(--muted); margin-top:16px">All portals are protected by login —
+    you'll need the credentials we send you. Demo data resets periodically.</p>
+  </div>
+</section>
+
 <div class="cta-final" id="contact">
   <h2>See your event in it.</h2>
   <p>A 30-minute walkthrough with your own scenario — clusters, properties and client groups —
   is the fastest way to judge it. No slides, just the product.</p>
-  <div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); border-radius:14px; max-width:460px; margin:0 auto; padding:26px 22px">
-    <div style="font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#b9c6ec; margin-bottom:8px">Write to us</div>
-    <div id="ams-email" style="font-size:21px; font-weight:700; color:#fff; user-select:all">rbt.musumeci@gmail.com</div>
-    <div style="display:flex; gap:10px; justify-content:center; margin-top:18px; flex-wrap:wrap">
-      <button class="btn" id="copy-email" style="border:0; cursor:pointer; font-family:inherit">Copy email address</button>
-      <a class="btn ghost" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Open in your mail app</a>
-    </div>
-    <p style="font-size:13px; color:#b9c6ec; margin:16px 0 0">Tell us your organisation and event — we reply within one business day.</p>
+  <div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); border-radius:14px; max-width:460px; margin:0 auto; padding:24px 22px">
+    <p style="font-size:15px; color:#e6ebfb; margin:0">Our contact form is on its way —
+    in the meantime, demo access and walkthroughs are arranged directly with the team.</p>
   </div>
 </div>
-<script>
-  document.getElementById('copy-email').onclick = async () => {
-    const btn = document.getElementById('copy-email');
-    try { await navigator.clipboard.writeText('rbt.musumeci@gmail.com'); }
-    catch { const r = document.createRange(); r.selectNode(document.getElementById('ams-email'));
-      getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => { btn.textContent = 'Copy email address'; }, 2000);
-  };
-</script>
 
 <footer>
   <div class="wrap">
