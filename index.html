@@ -78,7 +78,7 @@
       <a href="#security">Security</a>
       <a href="#about">About</a>
     </nav>
-    <a class="btn small" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request">Book a demo</a>
+    <a class="btn small" href="#contact">Book a demo</a>
   </div>
 </header>
 
@@ -89,8 +89,8 @@
     one system that runs your accommodation programme from hotel contracting to the rooming list.
     Built by people who ran it at the Olympic Games.</p>
     <div class="cta">
-      <a class="btn" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Book a demo</a>
-      <a class="btn ghost" href="#DEMO_URL" title="Live demo environment">Try it live</a>
+      <a class="btn" href="#contact">Book a demo</a>
+      <a class="btn ghost" href="#contact" title="Live demo environment">Try it live</a>
     </div>
     <div class="trust">
       <div><b>Per-night</b>inventory ledger</div>
@@ -232,8 +232,26 @@
   <h2>See your event in it.</h2>
   <p>A 30-minute walkthrough with your own scenario — clusters, properties and client groups —
   is the fastest way to judge it. No slides, just the product.</p>
-  <a class="btn" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Book a demo</a>
+  <div style="background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.25); border-radius:14px; max-width:460px; margin:0 auto; padding:26px 22px">
+    <div style="font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:#b9c6ec; margin-bottom:8px">Write to us</div>
+    <div id="ams-email" style="font-size:21px; font-weight:700; color:#fff; user-select:all">rbt.musumeci@gmail.com</div>
+    <div style="display:flex; gap:10px; justify-content:center; margin-top:18px; flex-wrap:wrap">
+      <button class="btn" id="copy-email" style="border:0; cursor:pointer; font-family:inherit">Copy email address</button>
+      <a class="btn ghost" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Open in your mail app</a>
+    </div>
+    <p style="font-size:13px; color:#b9c6ec; margin:16px 0 0">Tell us your organisation and event — we reply within one business day.</p>
+  </div>
 </div>
+<script>
+  document.getElementById('copy-email').onclick = async () => {
+    const btn = document.getElementById('copy-email');
+    try { await navigator.clipboard.writeText('rbt.musumeci@gmail.com'); }
+    catch { const r = document.createRange(); r.selectNode(document.getElementById('ams-email'));
+      getSelection().removeAllRanges(); getSelection().addRange(r); document.execCommand('copy'); }
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = 'Copy email address'; }, 2000);
+  };
+</script>
 
 <footer>
   <div class="wrap">
