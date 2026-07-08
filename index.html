@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AMS — Accommodation Management System for Major Events</title>
+<meta name="description" content="Room-night inventory, three portals and an allocation engine for the accommodation programme of major events — built by Games operations people.">
+<style>
+  :root {
+    --navy: #142250; --navy2: #1d306e; --ink: #17203a; --muted: #5c6784;
+    --bg: #f7f9fd; --line: #e3e8f2; --accent: #2f6fed; --ok: #14652a;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); line-height: 1.6; }
+  a { color: var(--accent); text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px; }
+
+  header { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .nav { display: flex; align-items: center; gap: 26px; padding: 14px 0; }
+  .logo { font-weight: 800; font-size: 19px; color: var(--navy); letter-spacing: .02em; }
+  .logo span { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 8px; }
+  .nav nav { margin-left: auto; display: flex; gap: 22px; font-size: 14.5px; }
+  .nav nav a { color: var(--ink); }
+  .btn { display: inline-block; background: var(--accent); color: #fff; padding: 10px 20px; border-radius: 9px; font-weight: 600; font-size: 15px; }
+  .btn.ghost { background: transparent; border: 1.5px solid rgba(255,255,255,.55); }
+  .btn.small { padding: 8px 16px; font-size: 14px; }
+
+  .hero { background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 60%, #27419a 100%); color: #fff; padding: 88px 0 72px; }
+  .hero h1 { font-size: 42px; line-height: 1.15; max-width: 780px; letter-spacing: -.01em; }
+  .hero p.sub { font-size: 19px; max-width: 660px; margin: 22px 0 34px; color: #cdd7f3; }
+  .hero .cta { display: flex; gap: 14px; flex-wrap: wrap; }
+  .trust { display: flex; gap: 34px; flex-wrap: wrap; margin-top: 54px; font-size: 14px; color: #b9c6ec; }
+  .trust b { display: block; font-size: 21px; color: #fff; }
+
+  section { padding: 72px 0; }
+  section.alt { background: #fff; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .kicker { text-transform: uppercase; letter-spacing: .1em; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+  h2 { font-size: 30px; margin: 8px 0 14px; letter-spacing: -.01em; }
+  .lead { font-size: 17px; color: var(--muted); max-width: 720px; }
+
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 22px; margin-top: 36px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 22px; box-shadow: 0 2px 10px rgba(16,28,70,.05); }
+  section.alt .card { background: var(--bg); }
+  .card h3 { font-size: 17.5px; margin-bottom: 8px; }
+  .card p { font-size: 14.5px; color: var(--muted); }
+  .card .tag { display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--navy); background: #e8eefc; border-radius: 20px; padding: 3px 10px; margin-bottom: 10px; }
+
+  .shot { width: 100%; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 30px rgba(16,28,70,.12); margin-top: 26px; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 44px; align-items: center; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } .hero h1 { font-size: 32px; } }
+  .split .shot { margin-top: 0; }
+  ul.checks { list-style: none; margin-top: 16px; }
+  ul.checks li { padding-left: 28px; position: relative; margin-bottom: 10px; font-size: 15.5px; }
+  ul.checks li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 800; }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+  .flow span { background: #fff; border: 1px solid var(--line); border-radius: 30px; padding: 9px 16px; font-size: 14px; font-weight: 600; }
+  .flow em { align-self: center; color: var(--muted); font-style: normal; }
+
+  .cta-final { background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%); color: #fff; text-align: center; padding: 78px 22px; }
+  .cta-final h2 { color: #fff; }
+  .cta-final p { color: #cdd7f3; max-width: 560px; margin: 12px auto 30px; }
+
+  footer { padding: 34px 0; font-size: 13.5px; color: var(--muted); display: flex; gap: 20px; flex-wrap: wrap; }
+  footer .wrap { display: flex; gap: 20px; flex-wrap: wrap; width: 100%; }
+  footer span:last-child { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <div class="logo">AMS <span>Accommodation Management System</span></div>
+    <nav>
+      <a href="#product">Product</a>
+      <a href="#portals">Portals</a>
+      <a href="#engine">Allocation engine</a>
+      <a href="#security">Security</a>
+      <a href="#about">About</a>
+    </nav>
+    <a class="btn small" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request">Book a demo</a>
+  </div>
+</header>
+
+<div class="hero">
+  <div class="wrap">
+    <h1>Accommodation management for major events, without the spreadsheets.</h1>
+    <p class="sub">Room-night inventory, client &amp; hotel portals and an allocation engine —
+    one system that runs your accommodation programme from hotel contracting to the rooming list.
+    Built by people who ran it at the Olympic Games.</p>
+    <div class="cta">
+      <a class="btn" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Book a demo</a>
+      <a class="btn ghost" href="#DEMO_URL" title="Live demo environment">Try it live</a>
+    </div>
+    <div class="trust">
+      <div><b>Per-night</b>inventory ledger</div>
+      <div><b>3 portals</b>operations · clients · hotels</div>
+      <div><b>Minutes</b>for an allocation round</div>
+      <div><b>EN / FR</b>one-click interface switch</div>
+    </div>
+  </div>
+</div>
+
+<section id="product">
+  <div class="wrap">
+    <div class="kicker">The problem</div>
+    <h2>Event accommodation breaks the tools it's managed with.</h2>
+    <p class="lead">A major event means hundreds of properties, thousands of rooms, dozens of client
+    organisations — each with contracts, entitlements, phased release rights and rooming lists that
+    change daily. Generic hotel software counts total rooms; events live and die <b>night by night</b>.
+    The result, almost everywhere: allocation done by hand in Excel, weeks of work, and numbers nobody
+    can fully reconstruct.</p>
+    <div class="grid3">
+      <div class="card"><h3>Inventory that loses nights</h3><p>A booking system that tracks "80 rooms" can't tell you that on 12 February you're 6 rooms short. AMS stores every room per hotel × type × <b>night</b> — availability is always the worst night of the stay, never an average.</p></div>
+      <div class="card"><h3>Manual allocation rounds</h3><p>Matching hundreds of requests to properties by hand takes weeks and satisfies no one. The AMS engine proposes a full round in seconds — priorities, entitlements and category blocks respected — and your team stays in control of every line.</p></div>
+      <div class="card"><h3>Numbers nobody can defend</h3><p>Who released those 40 rooms? When, and at what penalty? Every movement in AMS is an append-only ledger entry with a named user. Counters are reproducible from history — auditable by construction.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="ledger">
+  <div class="wrap split">
+    <div>
+      <div class="kicker">The foundation</div>
+      <h2>A room-night ledger, not a room counter.</h2>
+      <ul class="checks">
+        <li>Contracts, allocations, releases and stop-sells recorded <b>per night</b>, per room type, per hotel.</li>
+        <li>Shared physical pools: sell a Double as single-use at its own rate, from the same rooms.</li>
+        <li>Nightly rates by date range — shoulder nights priced differently from event nights.</li>
+        <li>Every counter rebuildable from the movement history, with one click.</li>
+      </ul>
+    </div>
+    <img class="shot" src="img/06-ops-inventory-grid.png" alt="AMS inventory grid — availability per hotel, room type and night" onerror="this.style.display='none'">
+  </div>
+</section>
+
+<section id="portals">
+  <div class="wrap">
+    <div class="kicker">One system, three portals</div>
+    <h2>Everyone works on the same numbers.</h2>
+    <p class="lead">No exports, no reconciliation meetings: operations, client organisations and hotels
+    each get their own portal on a single live inventory.</p>
+    <div class="grid3">
+      <div class="card">
+        <span class="tag">OPERATIONS</span>
+        <h3>Back-office</h3>
+        <p>Dashboard, per-night inventory grid, client files, allocation studio, release phases,
+        purchase orders, full audit. Role-based access with optional MFA.</p>
+        <img class="shot" src="img/02-ops-dashboard.png" alt="AMS operations dashboard" onerror="this.style.display='none'">
+      </div>
+      <div class="card">
+        <span class="tag">CLIENTS</span>
+        <h3>Client portal</h3>
+        <p>NOCs, federations, media and partners submit ranked requests with per-night demand,
+        review proposals, sign the AAA in-platform, release rooms within their allowance and load rooming lists.</p>
+        <img class="shot" src="img/24-portal-proposed-pending.png" alt="AMS client portal — proposed accommodation" onerror="this.style.display='none'">
+      </div>
+      <div class="card">
+        <span class="tag">HOTELS</span>
+        <h3>Supplier portal</h3>
+        <p>Each property sees its confirmed allocation live, keeps its factsheet current, registers
+        pro-forma invoices against purchase orders and downloads its allocation report.</p>
+        <img class="shot" src="img/26-supplier-home.png" alt="AMS supplier portal — property dashboard" onerror="this.style.display='none'">
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="engine">
+  <div class="wrap split">
+    <img class="shot" src="img/12-ops-studio.png" alt="AMS Allocation Studio — priority ranking and proposed plan" onerror="this.style.display='none'">
+    <div>
+      <div class="kicker">Allocation Studio</div>
+      <h2>Weeks of Excel become an afternoon of review.</h2>
+      <ul class="checks">
+        <li>Serve organisations by <b>your ranking</b> — never first-come-first-served.</li>
+        <li>Entitlements cap what each client can draw; pre-allocation blocks protect each group's rooms.</li>
+        <li>Preferences honoured in order; when they're full, the engine proposes the <b>closest alternative</b> by distance, price and stars — with a match score.</li>
+        <li>Room-category mixes in one request: 20 Doubles + 10 single-use + 2 Suites.</li>
+        <li>Everything is a draft until your team approves — one click turns the plan into real, ledgered allocations.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="lifecycle">
+  <div class="wrap">
+    <div class="kicker">End to end</div>
+    <h2>The full programme lifecycle, in one flow.</h2>
+    <div class="flow">
+      <span>Hotel contracting</span><em>→</em>
+      <span>Pre-allocation by client group</span><em>→</em>
+      <span>Client requests</span><em>→</em>
+      <span>Allocation round</span><em>→</em>
+      <span>Proposal · modifications · acceptance</span><em>→</em>
+      <span>AAA signed in-platform</span><em>→</em>
+      <span>Phased releases &amp; penalties</span><em>→</em>
+      <span>Rooming lists</span><em>→</em>
+      <span>Invoices &amp; purchase orders</span>
+    </div>
+    <p class="lead" style="margin-top:26px">Release allowances are enforced per property and per phase
+    (e.g. 30% free until 6 months out), with excess charges computed on the average nightly rate of the
+    released rooms — shown to the client <b>before</b> they confirm. Hotel payments follow cumulative
+    phases on the live inventory value, so releases and contract changes are absorbed automatically.</p>
+  </div>
+</section>
+
+<section class="alt" id="security">
+  <div class="wrap">
+    <div class="kicker">Security &amp; accountability</div>
+    <h2>Built to pass the questionnaire.</h2>
+    <div class="grid3">
+      <div class="card"><h3>Named users everywhere</h3><p>Role-based back-office (admin / operator / read-only), optional TOTP MFA, login rate-limiting, expiring sessions. Every action on every portal is attributable to a person.</p></div>
+      <div class="card"><h3>Three audit layers</h3><p>Inventory ledger, activity audit and login audit. A release made by a client's user shows their name — discussions end with a query, not an argument.</p></div>
+      <div class="card"><h3>Minimal attack surface</h3><p>Zero third-party runtime dependencies — no supply-chain surprises. EU hosting, GDPR-aware by design, deployable inside your own cloud tenant if required.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="wrap">
+    <div class="kicker">Who's behind it</div>
+    <h2>Built by operations, for operations.</h2>
+    <p class="lead">AMS is designed and built by accommodation operations people from the
+    Olympic &amp; Paralympic Winter Games — the ones who lived the allocation rounds, the release
+    negotiations and the 2 a.m. rooming-list changes. Every workflow in the product exists because
+    we needed it on the ground, and every frustration of the tools we used is fixed here.</p>
+  </div>
+</section>
+
+<div class="cta-final" id="contact">
+  <h2>See your event in it.</h2>
+  <p>A 30-minute walkthrough with your own scenario — clusters, properties and client groups —
+  is the fastest way to judge it. No slides, just the product.</p>
+  <a class="btn" href="mailto:rbt.musumeci@gmail.com?subject=AMS%20—%20demo%20request&body=Hi%2C%20I%27d%20like%20to%20see%20AMS%20in%20action.%0AOrganisation%3A%0AEvent%3A%0A">Book a demo</a>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span><b>AMS</b> — Accommodation Management System</span>
+    <span>English &amp; French interface</span>
+    <span>© 2026 · All rights reserved</span>
+  </div>
+</footer>
+
+</body>
+</html>
