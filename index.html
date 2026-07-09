@@ -110,6 +110,42 @@
   .cta-final p { color: var(--dim); max-width: 540px; margin: 16px auto 34px; }
   .notice { background: var(--panel); border: 1px solid var(--line2); border-radius: 14px; max-width: 470px; margin: 0 auto; padding: 22px; font-size: 15px; color: var(--dim); backdrop-filter: blur(6px); }
 
+  /* ---------- allocator live sim ---------- */
+  .sim { background: #0a0f22; border: 1px solid var(--line2); border-radius: 16px; overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(124,150,255,.08), 0 24px 70px rgba(0,0,0,.55), 0 0 60px rgba(124,150,255,.08); }
+  .sim-head { display: flex; align-items: center; gap: 9px; padding: 12px 16px; font-size: 12.5px; font-weight: 600;
+    color: var(--dim); border-bottom: 1px solid var(--line); letter-spacing: .04em; }
+  .sim-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); animation: simpulse 2s infinite; }
+  @keyframes simpulse { 50% { opacity: .4; } }
+  .sim-loop { margin-left: auto; color: var(--faint); font-weight: 500; }
+  .sim-stage { padding: 26px 22px 10px; }
+  .sim-bars { position: relative; display: flex; gap: 4%; align-items: flex-end; height: 190px; }
+  .sim-col { flex: 1; display: flex; flex-direction: column; height: 100%; justify-content: flex-end; }
+  .sim-tube { position: relative; flex: 1; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; overflow: hidden; background: rgba(255,255,255,.03); }
+  .sim-fill { position: absolute; bottom: 0; left: 0; right: 0; height: 0%; transition: height 1.4s cubic-bezier(.3,.7,.3,1);
+    background: linear-gradient(180deg, rgba(124,150,255,.9), rgba(167,139,250,.65)); }
+  .sim-top { position: absolute; left: 0; right: 0; height: 0%; bottom: 0%; transition: height 1.4s cubic-bezier(.3,.7,.3,1), bottom 1.4s cubic-bezier(.3,.7,.3,1);
+    background: linear-gradient(180deg, rgba(255,180,84,.9), rgba(255,180,84,.5)); }
+  .sim-org { margin-top: 8px; font-size: 11px; font-weight: 600; color: var(--dim); text-align: center; line-height: 1.3; }
+  .sim-org b { display: block; color: var(--ink); font-size: 11.5px; }
+  .sim-org .gtag { display: inline-block; font-size: 9px; letter-spacing: .08em; color: var(--violet);
+    background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.3); border-radius: 8px; padding: 1px 6px; margin-top: 2px; }
+  .sim-pct { position: absolute; top: 6px; left: 0; right: 0; text-align: center; font-size: 11px; font-weight: 700; color: #cdd6f7; opacity: 0; transition: opacity .5s; }
+  .sim-reason { position: absolute; top: -26px; left: 50%; transform: translateX(-50%) scale(.8); white-space: nowrap;
+    font-size: 9.5px; font-weight: 700; color: var(--ok); background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.35);
+    border-radius: 8px; padding: 2px 7px; opacity: 0; transition: all .4s cubic-bezier(.2,.9,.3,1.3); }
+  .sim-reason.alt2 { color: var(--amber); background: rgba(255,180,84,.1); border-color: rgba(255,180,84,.4); }
+  .sim-reason.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  .sim-floor { position: absolute; left: -2%; right: -2%; bottom: 0%; border-top: 2px dashed var(--amber); opacity: 0;
+    transition: bottom 1.4s cubic-bezier(.3,.7,.3,1), opacity .6s; z-index: 2; pointer-events: none; }
+  .sim-floor i { position: absolute; right: 0; top: -20px; font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--amber); }
+  .sim-chat { padding: 14px 16px 16px; border-top: 1px solid var(--line); min-height: 84px; }
+  .sim-bubble { font-size: 13.5px; line-height: 1.55; color: #c9d3f5; }
+  .sim-ai { display: inline-block; font-family: var(--display); font-size: 10.5px; font-weight: 700; letter-spacing: .1em;
+    color: var(--violet); background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.3);
+    border-radius: 8px; padding: 2px 8px; margin-right: 8px; vertical-align: 1px; }
+  .sim-caret { color: var(--violet); animation: simpulse 1s infinite; }
+
   footer { padding: 38px 0; font-size: 13px; color: var(--faint); border-top: 1px solid var(--line); }
   footer .wrap { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
   footer b { color: var(--dim); }
@@ -147,8 +183,8 @@
     engine — one platform that runs your programme from hotel contracting to the rooming list.</p>
     <div class="cta">
       <a class="btn" href="#contact">Book a demo</a>
-      <a class="btn ghost" href="video.html">▶ Watch the film · 90s</a>
-      <a class="btn ghost" href="#demo">See it live →</a>
+      <a class="btn ghost" href="#engine">See the engine think →</a>
+      <a class="btn ghost" href="#demo">Try it live</a>
     </div>
     <div class="stats">
       <div><b>Minutes</b><span>per allocation round,<br>not weeks of Excel</span></div>
@@ -241,7 +277,15 @@
 
 <section class="alt" id="engine">
   <div class="wrap split">
-    <img class="shot" src="img/12-ops-studio.png" alt="acmOS Allocation Studio — priority ranking and proposed plan" onerror="this.style.display='none'">
+    <div class="sim" id="sim">
+      <div class="sim-head"><span class="sim-dot"></span> allocation engine · live behaviour <span class="sim-loop">∞ loop</span></div>
+      <div class="sim-stage">
+        <div class="sim-bars" id="simBars">
+          <div class="sim-floor" id="simFloor"><i>guaranteed floor</i></div>
+        </div>
+      </div>
+      <div class="sim-chat"><div class="sim-bubble"><span class="sim-ai">✦ allocator</span> <span id="simMsg"></span><span class="sim-caret">▍</span></div></div>
+    </div>
     <div>
       <div class="kicker">Allocation Studio</div>
       <h2>Weeks of Excel. Now an afternoon of review.</h2>
@@ -349,5 +393,84 @@
   </div>
 </footer>
 
+<script>
+// ---- allocator live preview: silent, first-person, loops in view ----
+(function () {
+  const bars = document.getElementById('simBars');
+  const floor = document.getElementById('simFloor');
+  const msgEl = document.getElementById('simMsg');
+  if (!bars) return;
+  // organisations (fairness balances COMPANIES; the group tag only sets which floor applies)
+  const ORGS = [
+    { name: 'Canada', tag: 'NOC', final: 100, reason: '1st choice · FULL' },
+    { name: 'Japan', tag: 'NOC', final: 100, reason: '1st choice · FULL' },
+    { name: 'World Broadcasting', tag: 'MRH', final: 82, reason: '2nd choice · 82%' },
+    { name: 'Coca-Cola', tag: 'MP', final: 64, reason: 'alternative · 88% match', alt: true },
+    { name: 'USA Press', tag: 'PRESS', final: 50, reason: 'floor honoured', alt: true },
+  ];
+  ORGS.forEach((o) => {
+    const col = document.createElement('div');
+    col.className = 'sim-col';
+    col.innerHTML = `<div class="sim-tube"><div class="sim-reason${o.alt ? ' alt2' : ''}">${o.reason}</div>
+      <div class="sim-pct">0%</div><div class="sim-fill"></div><div class="sim-top"></div></div>
+      <div class="sim-org"><b>${o.name}</b><span class="gtag">${o.tag}</span></div>`;
+    bars.insertBefore(col, floor);
+  });
+  const fills = [...bars.querySelectorAll('.sim-fill')];
+  const tops = [...bars.querySelectorAll('.sim-top')];
+  const pcts = [...bars.querySelectorAll('.sim-pct')];
+  const reasons = [...bars.querySelectorAll('.sim-reason')];
+
+  let typeTimer = null;
+  function type(text) {
+    clearInterval(typeTimer);
+    msgEl.textContent = '';
+    let i = 0;
+    typeTimer = setInterval(() => {
+      msgEl.textContent = text.slice(0, ++i);
+      if (i >= text.length) clearInterval(typeTimer);
+    }, 18);
+  }
+  const setPct = (i, v) => { pcts[i].textContent = v + '%'; pcts[i].style.opacity = v > 0 ? 1 : 0; };
+
+  const STEPS = [
+    [0, () => { // reset
+      fills.forEach((f) => { f.style.height = '0%'; });
+      tops.forEach((t) => { t.style.height = '0%'; t.style.bottom = '0%'; });
+      reasons.forEach((r) => r.classList.remove('show'));
+      pcts.forEach((p) => { p.style.opacity = 0; });
+      floor.style.opacity = 0; floor.style.bottom = '0%';
+      type('New round: 5 organisations, 3 properties, 4,120 room-nights requested. I serve them in YOUR ranking — never first-come-first-served.');
+    }],
+    [4200, () => {
+      floor.style.opacity = 1; floor.style.bottom = '50%';
+      fills.forEach((f, i) => { f.style.height = '50%'; setTimeout(() => setPct(i, 50), 900); });
+      type('Fairness floor 50%: before anyone wins, EVERY organisation — large or small — is guaranteed half of its own request.');
+    }],
+    [9200, () => {
+      type('Above the floor, the ranking rules: I top each organisation up, in order, until the rooms run out.');
+      ORGS.forEach((o, i) => setTimeout(() => {
+        tops[i].style.bottom = '50%';
+        tops[i].style.height = Math.max(0, o.final - 50) + '%';
+        setPct(i, o.final);
+      }, 600 + i * 550));
+    }],
+    [14600, () => {
+      type('Every line gets a reason you can read: first choice honoured, an 88% alternative, a floor kept. Nothing is written until your team approves.');
+      reasons.forEach((r, i) => setTimeout(() => r.classList.add('show'), i * 380));
+    }],
+    [20500, null], // loop marker
+  ];
+
+  let running = false;
+  function loop() {
+    STEPS.forEach(([at, fn]) => { if (fn) setTimeout(fn, at); });
+    setTimeout(loop, STEPS[STEPS.length - 1][0]);
+  }
+  new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !running) { running = true; loop(); }
+  }, { threshold: 0.35 }).observe(bars);
+})();
+</script>
 </body>
 </html>
