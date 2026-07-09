@@ -146,6 +146,12 @@
     border-radius: 8px; padding: 2px 8px; margin-right: 8px; vertical-align: 1px; }
   .sim-caret { color: var(--violet); animation: simpulse 1s infinite; }
 
+  /* ---------- embedded film (YouTube-style player) ---------- */
+  .filmwrap { position: relative; aspect-ratio: 16 / 10; border-radius: 16px; overflow: hidden;
+    border: 1px solid var(--line2);
+    box-shadow: 0 0 0 1px rgba(124,150,255,.08), 0 24px 70px rgba(0,0,0,.55), 0 0 60px rgba(124,150,255,.1); }
+  .filmwrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
   footer { padding: 38px 0; font-size: 13px; color: var(--faint); border-top: 1px solid var(--line); }
   footer .wrap { display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
   footer b { color: var(--dim); }
@@ -277,14 +283,8 @@
 
 <section class="alt" id="engine">
   <div class="wrap split">
-    <div class="sim" id="sim">
-      <div class="sim-head"><span class="sim-dot"></span> allocation engine · live behaviour <span class="sim-loop">∞ loop</span></div>
-      <div class="sim-stage">
-        <div class="sim-bars" id="simBars">
-          <div class="sim-floor" id="simFloor"><i>guaranteed floor</i></div>
-        </div>
-      </div>
-      <div class="sim-chat"><div class="sim-bubble"><span class="sim-ai">✦ allocator</span> <span id="simMsg"></span><span class="sim-caret">▍</span></div></div>
+    <div class="filmwrap">
+      <iframe src="video.html" title="acmOS — how the allocation engine thinks (70s)" loading="lazy" allow="autoplay"></iframe>
     </div>
     <div>
       <div class="kicker">Allocation Studio</div>
