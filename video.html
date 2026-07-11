@@ -400,6 +400,8 @@ const LINES = [
   'acmOS. The engine proposes. Your team decides.',                                      // v21
 ];
 let voiceOn = true, ccOn = false, VOICEMODE = 'tts', curClip = null;
+let vq = [], speaking = false, curUt = null;
+const voiceBusy = () => speaking || vq.length > 0;
 const clips = [];
 fetch('voice/v00.mp3', { method: 'HEAD' }).then((r) => {
   if (!r.ok) return;
@@ -416,24 +418,39 @@ function pickVoice() { const vs = speechSynthesis.getVoices();
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
 const duckTo = (v) => { if (AC && musGain) { musGain.gain.cancelScheduledValues(AC.currentTime);
   musGain.gain.setTargetAtTime(musicOn ? v : 0, AC.currentTime, v < MVOL ? .08 : .3); } };
-function stopVoice() { if (curClip) { curClip.pause(); curClip = null; }
-  if ('speechSynthesis' in window) speechSynthesis.cancel(); duckTo(MVOL); }
-function say(i) {
-  if (FROZEN) return;
+function stopVoice() { vq = []; speaking = false;
+  if (curClip) { curClip.onended = null; curClip.pause(); curClip = null; }
+  if (curUt) { curUt.onend = null; curUt = null; }
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  duckTo(MVOL); }
+// Lines NEVER cut each other: they queue, and each visual hook fires when its
+// line actually STARTS — so pacing follows the real voice, clip or synthetic.
+function lineDone() { speaking = false;
+  if (vq.length) setTimeout(speakNext, 320); else duckTo(MVOL); }
+function speakNext() {
+  if (speaking || !vq.length) return;
+  const { i, cb } = vq.shift();
+  speaking = true; duckTo(.18);
+  if (cb) { try { cb(); } catch (e) {} }
   if (ccOn) cap(LINES[i]);
-  if (!voiceOn) return;
-  duckTo(.18);
   if (VOICEMODE === 'clips' && clips[i]) {
-    if (curClip) curClip.pause();
-    curClip = clips[i]; curClip.currentTime = 0; curClip.onended = () => duckTo(MVOL);
-    curClip.play().catch(() => {});
+    curClip = clips[i]; curClip.currentTime = 0;
+    curClip.onended = () => { curClip = null; lineDone(); };
+    curClip.play().catch(() => { curClip = null; lineDone(); });
   } else if ('speechSynthesis' in window) {
-    speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(LINES[i]);
     if (VOICE) u.voice = VOICE;
-    u.rate = .97; u.onend = () => duckTo(MVOL);
+    u.rate = .97; curUt = u;
+    u.onend = u.onerror = () => { curUt = null; lineDone(); };
     speechSynthesis.speak(u);
-  }
+    // some engines drop onend: hard safety net at ~1s per 10 chars + 3s
+    setTimeout(() => { if (curUt === u) { curUt = null; lineDone(); } }, LINES[i].length * 100 + 3000);
+  } else { lineDone(); }
+}
+function say(i, cb = null) {
+  if (FROZEN) { if (cb) { try { cb(); } catch (e) {} } return; }
+  if (!voiceOn) { if (cb) { try { cb(); } catch (e) {} } if (ccOn) cap(LINES[i]); return; }
+  vq.push({ i, cb }); speakNext();
 }
 let capTimer = null;
 function cap(tx, hold = 0) {
@@ -478,24 +495,25 @@ const primeLab = (p, state) => EX.orgs.forEach((o) => {
 });
 
 /* ---------------- timeline ---------------- */
+const WAIT = 'wait';
 const CUES = [
   // S0 · hook
   [0.5,   () => { showK(0, '.kl', 0); tell(0); }],
   [2.3,   () => showK(0, '.kl', 1)],
   [5.4,   () => { showK(0, '.kl', 2); tell(1); }],
   // S1 · requests
-  [11.0,  () => { goTo(1); flash(); cap(''); }],
+  [11.0, WAIT, () => { goTo(1); flash(); cap(''); }],
   [11.7,  () => { showK(1, '.kick'); showK(1, '.h2'); tell(2); }],
   [12.4,  () => EX.orgs.forEach((o, i) => setTimeout(() => { $('#oc' + o.id).classList.add('in'); clack(); }, i * 420))],
   [16.8,  () => $$('.oc .ln').forEach((l, i) => setTimeout(() => l.classList.add('show'), (i % 2) * 700 + Math.floor(i / 2) * 220))],
   [18.6,  () => { $('#totchip').classList.add('in'); chime(880, .12); tell(3); }],
   // S2 · levers
-  [25.2,  () => { goTo(2); flash(); cap(''); }],
+  [25.2, WAIT, () => { goTo(2); flash(); cap(''); }],
   [25.9,  () => { showK(2, '.kick'); showK(2, '.h2'); tell(4); }],
   [30.8,  () => { const rows = $$('#cons > div');
-    rows.forEach((r, i) => setTimeout(() => { r.classList.add('show'); clack(); tell(5 + i); }, i * 3700)); }],
+    rows.forEach((r, i) => say(5 + i, () => { r.classList.add('show'); clack(); })); }],
   // S3 · PASS A
-  [48.6,  () => { goTo(3); flash(); cap(''); setTank('a', EX.cap, 1); }],
+  [48.6, WAIT, () => { goTo(3); flash(); cap(''); setTank('a', EX.cap, 1); }],
   [49.3,  () => { showK(3, '.kick'); showK(3, '.h2'); tell(9); }],
   [53.4,  () => { showFloorMarks('a'); chime(660, .14); }],
   [54.2,  () => { EX.orgs.forEach((o, i) => setTimeout(() => {
@@ -503,14 +521,14 @@ const CUES = [
     setTimeout(() => setTank('a', 40), 500); }],
   [58.4,  () => { EX.orgs.forEach((o) => setChip('a', o.id, 'amc', `floor · ${o.floor} of ${o.want}`)); tell(10); }],
   // S4 · PASS B
-  [63.4,  () => { goTo(4); flash(); cap(''); primeLab('b', 'afterA'); setTank('b', 40, 1); }],
+  [63.4, WAIT, () => { goTo(4); flash(); cap(''); primeLab('b', 'afterA'); setTank('b', 40, 1); }],
   [64.1,  () => { showK(4, '.kick'); showK(4, '.h2'); tell(11); }],
   [68.9,  () => { setTop('b', 'A', 30, 70); setCnt('b', 'A', 12, 40); setTank('b', 12); tell(12); }],
   [72.7,  () => setChip('b', 'A', 'okc', 'FULL · 40 of 40')],
-  [73.4,  () => { setTop('b', 'B', 30, 40); setCnt('b', 'B', 9, 21); setTank('b', 0); tell(13); }],
-  [78.4,  () => { setChip('b', 'B', 'amc', '70% · 21 of 30'); setChip('b', 'C', 'amc', 'floor kept · 9'); tell(14); }],
+  [73.4,  () => say(13, () => { setTop('b', 'B', 30, 40); setCnt('b', 'B', 9, 21); setTank('b', 0); })],
+  [78.4,  () => say(14, () => { setChip('b', 'B', 'amc', '70% · 21 of 30'); setChip('b', 'C', 'amc', 'floor kept · 9'); })],
   // S5 · counterfactual
-  [83.0,  () => { goTo(5); flash(); cap(''); setTank('x', 0, 1);
+  [83.0, WAIT, () => { goTo(5); flash(); cap(''); setTank('x', 0, 1);
     setTimeout(() => { setFill('x', 'A', 100); setCnt('x', 'A', 0, 40, 900);
       setFill('x', 'B', 100); setCnt('x', 'B', 0, 30, 900);
       setFill('x', 'C', 0); setCnt('x', 'C', 0, 0, 400); }, 750); }],
@@ -518,7 +536,7 @@ const CUES = [
   [90.3,  () => { setChip('x', 'A', 'okc', 'FULL'); setChip('x', 'B', 'okc', 'FULL'); setChip('x', 'C', 'bdc', '✕ 0 rooms — locked out'); chime(220, .16); }],
   [91.1,  () => tell(16)],
   // S6 · proposal + the human
-  [96.9,  () => { goTo(6); flash(); cap(''); }],
+  [96.9, WAIT, () => { goTo(6); flash(); cap(''); }],
   [97.6,  () => { showK(6, '.kick'); showK(6, '.h2'); tell(17); }],
   [98.4,  () => ['pA', 'pB', 'pC'].forEach((id, i) => setTimeout(() => { $('#' + id).classList.add('in'); clack(); }, i * 430))],
   [103.4, () => { tell(18); const [x, y] = centerOf($('#cHotel')); moveCursor(x, y); }],
@@ -531,9 +549,9 @@ const CUES = [
   [112.4, () => { $('#allocbtn').classList.add('pressed'); flash(); chime(1760, .14); moveCursor(0, 0, false);
     $('#ledgerline').classList.add('show'); tell(20); }],
   // S7 · outro
-  [118.6, () => { goTo(7); cap(''); musicEnd(); }],
+  [118.6, WAIT, () => { goTo(7); cap(''); musicEnd(); }],
   [119.5, () => { $('#logo7').classList.add('show'); chime(1320, .13); setTimeout(() => chime(1980, .09), 300); tell(21); }],
-  [124.8, () => { stopVoice(); cap(''); }],
+  [124.8, WAIT, () => { stopVoice(); cap(''); }],
 ];
 const TOTAL = 126;
 
@@ -548,14 +566,26 @@ function start(seekTo = 0) {
   $('#gate').style.display = 'none'; $('#hud').style.display = 'flex';
   tStart = nowS() + .1 - seekTo; barCount = Math.max(0, Math.floor(seekTo / BAR)); cueIx = 0;
   if (seekTo > 0) { world.style.transition = 'none';
-    while (cueIx < CUES.length && CUES[cueIx][0] < seekTo) { try { CUES[cueIx][1](); } catch (e) {} cueIx++; }
+    while (cueIx < CUES.length && CUES[cueIx][0] < seekTo) {
+      const c = CUES[cueIx], f = c[1] === WAIT ? c[2] : c[1];
+      try { f(); } catch (e) {} cueIx++; }
     setTimeout(() => { world.style.transition = ''; }, 60); }
   if (FROZEN) { $('#bar').style.width = Math.min(100, seekTo / TOTAL * 100) + '%'; return; }
   if (AC) { t0m = tStart; musicTimer = setInterval(() => { if (t0m + barCount * BAR < AC.currentTime + 1.4) scheduleBar(); }, 220); }
+  let holdSince = null;
   ticker = setInterval(() => {
-    const el = nowS() - tStart;
+    let el = nowS() - tStart;
+    while (cueIx < CUES.length && CUES[cueIx][0] <= el) {
+      const cue = CUES[cueIx], isWait = cue[1] === WAIT, fn = isWait ? cue[2] : cue[1];
+      if (isWait && voiceBusy()) {                    // barrier: the scene holds for the voice
+        if (holdSince == null) holdSince = nowS();
+        if (nowS() - holdSince < 6) { tStart = nowS() - cue[0]; el = cue[0]; break; }
+        stopVoice();                                  // safety cap: never stall the film
+      }
+      holdSince = null;
+      try { fn(); } catch (e) { console.error(e); } cueIx++;
+    }
     $('#bar').style.width = Math.min(100, el / TOTAL * 100) + '%';
-    while (cueIx < CUES.length && CUES[cueIx][0] <= el) { try { CUES[cueIx][1](); } catch (e) { console.error(e); } cueIx++; }
     if (el > TOTAL) { clearInterval(ticker); clearInterval(musicTimer); }
   }, 50);
 }
