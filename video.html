@@ -4,107 +4,179 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>acmOS — How the allocation engine thinks</title>
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700;800&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#070b17; --ink:#eef1fb; --dim:#8d99c4; --blue:#5b7cfa; --violet:#a78bfa; --amber:#ffb454; --ok:#4ade80; --bad:#f87171; }
+  :root { --bg:#070b17; --ink:#eef1fb; --dim:#8d99c4; --faint:#5f6a8f; --blue:#5b7cfa; --violet:#a78bfa;
+    --amber:#ffb454; --ok:#4ade80; --bad:#f87171; --grad:linear-gradient(92deg,#7c96ff,#a78bfa,#d6b4fe); }
   * { box-sizing:border-box; margin:0; }
-  html,body { height:100%; background:var(--bg); color:var(--ink); font-family:"Inter",sans-serif; overflow:hidden; }
+  html,body { height:100%; background:var(--bg); color:var(--ink); font-family:"Inter","Segoe UI",sans-serif; overflow:hidden; }
+  .num { font-variant-numeric:tabular-nums; }
 
-  /* ---------- poster / gate (YouTube-like) ---------- */
-  #gate { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4vh; z-index:50;
-    background:radial-gradient(ellipse 110% 110% at 50% 0%, #131c3f 0%, var(--bg) 70%); cursor:pointer; }
-  #gate .ghost-bars { display:flex; gap:2vw; align-items:flex-end; height:22vh; opacity:.25; }
-  #gate .gb { width:6vw; border-radius:6px 6px 0 0; background:linear-gradient(180deg,#7c96ff,#a78bfa); }
-  #gate h1 { font-family:"Sora"; font-size:clamp(16px,2.6vw,26px); font-weight:700; text-align:center; color:var(--dim); }
+  /* ---------- ambient background ---------- */
+  #bgfx { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+  #bgfx::before { content:""; position:absolute; inset:0;
+    background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+    background-size:46px 46px; mask-image:radial-gradient(ellipse 80% 65% at 50% 30%,#000 20%,transparent 72%); }
+  .blob { position:absolute; border-radius:50%; filter:blur(95px); opacity:.4; }
+  .b1 { width:46vw; height:34vh; top:-12vh; left:6vw; background:#3d63f5; animation:drift1 26s ease-in-out infinite alternate; }
+  .b2 { width:38vw; height:30vh; bottom:-14vh; right:4vw; background:#7c3aed; opacity:.28; animation:drift2 31s ease-in-out infinite alternate; }
+  @keyframes drift1 { to { transform:translate(9vw,6vh) scale(1.12); } }
+  @keyframes drift2 { to { transform:translate(-8vw,-5vh) scale(1.08); } }
+
+  /* ---------- poster gate ---------- */
+  #gate { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3.6vh; z-index:50;
+    background:radial-gradient(ellipse 110% 110% at 50% 0%,#131c3f 0%,var(--bg) 70%); cursor:pointer; }
+  #gate .ghost { display:flex; gap:2.2vw; align-items:flex-end; height:20vh; opacity:.3; }
+  #gate .gb { width:5.4vw; border-radius:8px 8px 0 0; background:linear-gradient(180deg,#7c96ff,#a78bfa); position:relative; }
+  #gate .gb i { position:absolute; left:0; right:0; bottom:30%; border-top:2px dashed rgba(255,180,84,.9); }
+  #gate h1 { font-family:"Sora",sans-serif; font-size:clamp(17px,2.7vw,27px); font-weight:700; text-align:center; color:var(--dim); line-height:1.45; }
   #gate h1 b { color:var(--ink); }
-  #play { width:clamp(58px,9vw,84px); height:clamp(58px,9vw,84px); border-radius:50%; border:0; cursor:pointer; font-size:clamp(20px,3vw,30px); color:#0b0f1e;
-    background:linear-gradient(135deg,#7c96ff,#a78bfa); box-shadow:0 0 50px rgba(124,150,255,.55); transition:transform .15s; }
-  #gate:hover #play { transform:scale(1.1); }
-  #gate p { color:var(--dim); font-size:12.5px; }
+  #play { width:clamp(60px,9vw,86px); height:clamp(60px,9vw,86px); border-radius:50%; border:0; cursor:pointer; font-size:clamp(21px,3vw,31px); color:#0b0f1e;
+    background:linear-gradient(135deg,#7c96ff,#a78bfa); box-shadow:0 0 55px rgba(124,150,255,.55); transition:transform .15s; }
+  #gate:hover #play { transform:scale(1.09); }
+  #gate p { color:var(--faint); font-size:12.5px; }
 
-  #bar { position:fixed; top:0; left:0; height:3px; background:linear-gradient(90deg,#7c96ff,#a78bfa); width:0%; z-index:40; }
-  #hud { position:fixed; bottom:10px; right:10px; z-index:40; display:flex; gap:6px; opacity:.75; }
+  /* ---------- chrome ---------- */
+  #bar { position:fixed; top:0; left:0; height:3px; background:var(--grad); width:0%; z-index:40; }
+  #marks { position:fixed; top:0; left:0; right:0; height:3px; z-index:39; }
+  #marks i { position:absolute; top:0; width:2px; height:3px; background:rgba(255,255,255,.25); }
+  #hud { position:fixed; bottom:10px; right:10px; z-index:40; display:flex; gap:6px; opacity:.8; }
   #hud button { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.2); color:var(--ink);
     border-radius:8px; padding:5px 10px; font-size:11px; cursor:pointer; font-family:inherit; }
+  #cap { position:fixed; bottom:5.5vh; left:50%; transform:translateX(-50%); z-index:35; max-width:min(880px,88vw);
+    text-align:center; font-size:clamp(13.5px,1.7vw,19px); color:#dbe3ff; font-weight:600; line-height:1.5;
+    background:rgba(7,11,23,.62); border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:10px 22px;
+    backdrop-filter:blur(8px); opacity:0; transition:opacity .35s; }
+  #cap.on { opacity:1; }
+  #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:45; }
 
-  /* ---------- world (continuous pan) ---------- */
-  #world { position:absolute; inset:0; width:600vw; display:flex; transition:transform 1.3s cubic-bezier(.7,0,.25,1); }
-  .scene { width:100vw; height:100vh; position:relative; flex:none; display:flex; align-items:center; justify-content:center; }
+  /* ---------- world ---------- */
+  #world { position:absolute; inset:0; width:800vw; display:flex; transition:transform 1.25s cubic-bezier(.7,0,.25,1); z-index:1; }
+  .scene { width:100vw; height:100vh; position:relative; flex:none; display:flex; flex-direction:column; align-items:center; justify-content:center; padding-bottom:10vh; }
+  .kick { font-family:"Sora",sans-serif; font-size:clamp(10.5px,1.15vw,13px); font-weight:700; letter-spacing:.16em; color:var(--violet);
+    text-transform:uppercase; margin-bottom:1.6vh; opacity:0; transform:translateY(18px); transition:all .5s cubic-bezier(.2,.9,.3,1.1); }
+  .kick.show { opacity:1; transform:none; }
+  .kick::before { content:"✦ "; color:var(--amber); }
+  .k { font-family:"Sora",sans-serif; font-weight:800; letter-spacing:-.01em; text-align:center; padding:0 6vw; }
+  .kl { display:block; font-size:clamp(23px,4.4vw,52px); opacity:0; transform:translateY(30px); filter:blur(5px); }
+  .kl.show { opacity:1; transform:none; filter:none; transition:all .5s cubic-bezier(.2,.9,.3,1.12); }
+  .kl.g { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .kl.small { font-size:clamp(13px,1.8vw,20px); font-weight:600; color:var(--dim); font-family:"Inter",sans-serif; }
+  .h2 { font-family:"Sora",sans-serif; font-weight:800; font-size:clamp(20px,3.2vw,40px); text-align:center; padding:0 6vw;
+    opacity:0; transform:translateY(26px); transition:all .5s cubic-bezier(.2,.9,.3,1.12); }
+  .h2.show { opacity:1; transform:none; }
+  .h2 .am { color:var(--amber); } .h2 .gr { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
 
-  .k { font-family:"Sora"; font-weight:800; letter-spacing:-.01em; text-align:center; padding:0 6vw; }
-  .kl { display:block; font-size:clamp(22px,4.6vw,54px); opacity:0; transform:translateY(34px); filter:blur(5px); }
-  .kl.show { opacity:1; transform:none; filter:none; transition:all .45s cubic-bezier(.2,.9,.3,1.15); }
-  .kl.g { background:linear-gradient(92deg,#7c96ff,#a78bfa,#d6b4fe); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .kl.small { font-size:clamp(13px,1.8vw,20px); font-weight:600; color:var(--dim); font-family:"Inter"; }
+  /* ---------- S1 org cards ---------- */
+  .cards { display:flex; gap:2.2vw; justify-content:center; margin-top:4vh; }
+  .oc { width:23vw; min-width:200px; max-width:290px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.16);
+    border-radius:16px; padding:1.6vw 1.5vw; text-align:left; opacity:0; transform:translateY(46px);
+    transition:all .6s cubic-bezier(.2,.85,.3,1.1); position:relative; }
+  .oc.in { opacity:1; transform:none; }
+  .oc .rk { position:absolute; top:-11px; right:14px; font-size:10px; font-weight:800; letter-spacing:.1em; font-family:"Sora",sans-serif;
+    background:#0b1122; border:1px solid rgba(124,150,255,.45); color:#aab9ff; border-radius:20px; padding:3px 10px; }
+  .oc h4 { font-family:"Sora",sans-serif; font-size:clamp(15px,1.6vw,20px); display:flex; align-items:center; gap:9px; }
+  .oc h4 .dot { width:11px; height:11px; border-radius:4px; background:var(--grad); box-shadow:0 0 12px rgba(124,150,255,.7); }
+  .oc .want { font-family:"Sora",sans-serif; font-weight:800; font-size:clamp(23px,2.6vw,32px); margin:1vh 0 .2vh; }
+  .oc .want small { font-size:clamp(10.5px,1vw,12.5px); color:var(--dim); font-weight:600; font-family:"Inter",sans-serif; display:block; }
+  .oc .ln { font-size:clamp(10.5px,1.05vw,13px); color:var(--dim); margin-top:.7vh; opacity:0; transition:opacity .4s; }
+  .oc .ln.show { opacity:1; }
+  .oc .ln b { color:var(--ink); font-weight:600; }
+  #totchip { margin-top:4vh; display:inline-flex; gap:14px; align-items:center; font-family:"Sora",sans-serif; font-weight:700;
+    font-size:clamp(13px,1.5vw,18px); background:rgba(255,180,84,.09); border:1px solid rgba(255,180,84,.4);
+    color:var(--amber); border-radius:12px; padding:10px 20px; opacity:0; transform:scale(.9); transition:all .45s cubic-bezier(.2,.9,.3,1.2); }
+  #totchip.in { opacity:1; transform:none; }
 
-  #cap { position:fixed; bottom:8vh; width:100%; text-align:center; z-index:35; padding:0 8vw;
-    font-size:clamp(13px,1.6vw,19px); color:#c9d3f5; text-shadow:0 2px 14px rgba(0,0,0,.85); font-weight:600; }
+  /* ---------- S2 levers ---------- */
+  .consider { text-align:left; font-size:clamp(14px,1.75vw,20px); font-weight:600; margin-top:2vh; }
+  .consider > div { margin:2vh 0; opacity:0; transform:translateX(-30px); transition:all .45s cubic-bezier(.2,.9,.3,1.15); display:flex; gap:14px; align-items:center; }
+  .consider > div.show { opacity:1; transform:none; }
+  .consider .ic { width:38px; height:38px; border-radius:11px; background:rgba(124,150,255,.13); border:1px solid rgba(124,150,255,.32);
+    display:flex; align-items:center; justify-content:center; font-size:17px; flex:none; }
+  .consider small { display:block; font-weight:500; color:var(--dim); font-size:clamp(11px,1.2vw,14px); }
 
-  /* org request cards */
-  .orgcard { width:22vw; min-width:190px; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.16); border-radius:14px;
-    padding:1.4vw; text-align:left; opacity:0; transform:translateY(50px); transition:all .6s cubic-bezier(.2,.85,.3,1.1); }
-  .orgcard.in { opacity:1; transform:none; }
-  .orgcard h4 { font-family:"Sora"; font-size:clamp(14px,1.5vw,19px); }
-  .orgcard .ln { font-size:clamp(10px,1.05vw,13px); color:var(--dim); margin-top:.5vw; opacity:0; transition:opacity .4s; }
-  .orgcard .ln.show { opacity:1; }
-  .orgcard .ln b { color:var(--ink); font-weight:600; }
+  /* ---------- S3/S4/S5 the worked example ---------- */
+  .lab { display:flex; gap:5vw; align-items:flex-end; margin-top:3.2vh; }
+  .bars { display:flex; gap:3vw; align-items:flex-end; height:38vh; }
+  .bcol { width:10vw; max-width:120px; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end; }
+  .tube { position:relative; width:100%; flex:none; border:1px solid rgba(255,255,255,.16); border-radius:12px; overflow:hidden;
+    background:rgba(255,255,255,.03); transition:height 1s cubic-bezier(.3,.7,.3,1); }
+  .fill { position:absolute; bottom:0; left:0; right:0; height:0%; transition:height 1.4s cubic-bezier(.3,.7,.3,1);
+    background:linear-gradient(180deg,rgba(124,150,255,.92),rgba(167,139,250,.6)); }
+  .tup { position:absolute; left:0; right:0; bottom:0%; height:0%; transition:all 1.4s cubic-bezier(.3,.7,.3,1);
+    background:linear-gradient(180deg,rgba(255,180,84,.95),rgba(255,180,84,.5)); }
+  .fmark { position:absolute; left:-6%; right:-6%; border-top:2px dashed rgba(255,180,84,.85); bottom:30%; opacity:0; transition:opacity .6s; }
+  .cnt { position:absolute; top:7px; left:0; right:0; text-align:center; font-family:"Sora",sans-serif; font-weight:800;
+    font-size:clamp(13px,1.5vw,18px); color:#dfe6ff; text-shadow:0 2px 8px rgba(0,0,0,.7); opacity:0; transition:opacity .5s; }
+  .cnt small { display:block; font-size:9.5px; color:var(--dim); font-weight:600; letter-spacing:.05em; }
+  .blab { text-align:center; margin-top:1.4vh; font-family:"Sora",sans-serif; font-weight:700; font-size:clamp(12.5px,1.4vw,16px); }
+  .blab small { display:block; color:var(--dim); font-weight:500; font-size:10.5px; margin-top:2px; }
+  .chip { margin-top:1vh; font-size:clamp(9.5px,1vw,11.5px); font-weight:700; border-radius:8px; padding:3px 9px;
+    opacity:0; transform:scale(.75); transition:all .4s cubic-bezier(.2,.9,.3,1.3); white-space:nowrap; }
+  .chip.show { opacity:1; transform:none; }
+  .chip.okc { color:var(--ok); background:rgba(74,222,128,.1); border:1px solid rgba(74,222,128,.35); }
+  .chip.amc { color:var(--amber); background:rgba(255,180,84,.1); border:1px solid rgba(255,180,84,.4); }
+  .chip.bdc { color:var(--bad); background:rgba(248,113,113,.1); border:1px solid rgba(248,113,113,.4); }
+  /* inventory tank */
+  .tank { display:flex; flex-direction:column; align-items:center; height:38vh; }
+  .tk { position:relative; width:7vw; max-width:86px; flex:1; border:1px solid rgba(255,255,255,.2); border-radius:12px;
+    overflow:hidden; background:rgba(255,255,255,.03); }
+  .tkf { position:absolute; bottom:0; left:0; right:0; height:100%; transition:height 1.5s cubic-bezier(.3,.7,.3,1);
+    background:linear-gradient(180deg,rgba(74,222,128,.55),rgba(74,222,128,.25)); }
+  .tkn { position:absolute; top:50%; left:0; right:0; transform:translateY(-50%); text-align:center;
+    font-family:"Sora",sans-serif; font-weight:800; font-size:clamp(17px,2vw,24px); color:#eafff2; text-shadow:0 2px 10px rgba(0,0,0,.8); }
+  .tkn small { display:block; font-size:9px; letter-spacing:.08em; color:#bfe9cd; font-weight:700; }
+  .tklab { margin-top:1.4vh; font-family:"Sora",sans-serif; font-weight:700; font-size:clamp(12px,1.3vw,15px); color:var(--dim); }
 
-  /* considers list */
-  .consider { text-align:left; font-size:clamp(14px,1.8vw,21px); font-weight:600; }
-  .consider div { margin:1.6vh 0; opacity:0; transform:translateX(-30px); transition:all .45s cubic-bezier(.2,.9,.3,1.15); display:flex; gap:12px; align-items:center; }
-  .consider div.show { opacity:1; transform:none; }
-  .consider .ic { width:34px; height:34px; border-radius:10px; background:rgba(124,150,255,.14); border:1px solid rgba(124,150,255,.3);
-    display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
-
-  /* fairness bars */
-  .fw { display:flex; gap:3vw; align-items:flex-end; height:36vh; position:relative; }
-  .fc { width:9vw; max-width:110px; height:100%; display:flex; flex-direction:column; justify-content:flex-end; }
-  .ft { position:relative; flex:1; border:1px solid rgba(255,255,255,.15); border-radius:10px; overflow:hidden; background:rgba(255,255,255,.03); }
-  .ff { position:absolute; bottom:0; left:0; right:0; height:0%; transition:height 1.5s cubic-bezier(.3,.7,.3,1);
-    background:linear-gradient(180deg,rgba(124,150,255,.9),rgba(167,139,250,.65)); }
-  .fu { position:absolute; left:0; right:0; bottom:0%; height:0%; transition:all 1.5s cubic-bezier(.3,.7,.3,1);
-    background:linear-gradient(180deg,rgba(255,180,84,.95),rgba(255,180,84,.55)); }
-  .fl { text-align:center; margin-top:10px; font-size:clamp(12px,1.4vw,16px); font-weight:700; font-family:"Sora"; }
-  .fl small { display:block; color:var(--dim); font-weight:500; font-size:10.5px; }
-  #fline { position:absolute; left:-4%; right:-4%; bottom:0%; border-top:2px dashed var(--amber); opacity:0; transition:bottom 1.4s, opacity .5s; }
-  #fline span { position:absolute; right:0; top:-22px; font-size:11px; color:var(--amber); font-weight:700; }
-
-  /* proposal rows + interaction */
-  .prow { width:min(620px,84vw); background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); border-radius:12px;
-    padding:12px 16px; margin:8px auto; display:flex; align-items:center; gap:12px; text-align:left;
-    opacity:0; transform:translateY(30px); transition:all .5s cubic-bezier(.2,.85,.3,1.1); font-size:clamp(12px,1.4vw,15px); }
+  /* ---------- S6 proposal ---------- */
+  .prow { width:min(660px,86vw); background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.15); border-radius:13px;
+    padding:13px 17px; margin:9px auto; display:flex; align-items:center; gap:13px; text-align:left;
+    opacity:0; transform:translateY(28px); transition:all .5s cubic-bezier(.2,.85,.3,1.1); font-size:clamp(12.5px,1.45vw,15.5px); }
   .prow.in { opacity:1; transform:none; }
-  .prow b { font-family:"Sora"; }
+  .prow b { font-family:"Sora",sans-serif; }
   .prow .why { margin-left:auto; font-size:clamp(10px,1.1vw,12.5px); font-weight:700; color:var(--ok);
-    background:rgba(74,222,128,.1); border:1px solid rgba(74,222,128,.35); border-radius:8px; padding:3px 9px; white-space:nowrap; }
+    background:rgba(74,222,128,.1); border:1px solid rgba(74,222,128,.35); border-radius:8px; padding:3px 10px; white-space:nowrap; }
   .prow .why.alt { color:var(--amber); background:rgba(255,180,84,.1); border-color:rgba(255,180,84,.4); }
-  .prow .tick { width:20px; height:20px; border-radius:6px; border:1.5px solid rgba(255,255,255,.3); flex:none; position:relative; }
+  .prow .tick { width:21px; height:21px; border-radius:7px; border:1.5px solid rgba(255,255,255,.3); flex:none; position:relative; }
   .prow .tick.on { border-color:var(--ok); background:rgba(74,222,128,.15); }
   .prow .tick.on::after { content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--ok); font-weight:800; font-size:13px; }
-  .prow .hotel { transition:all .4s; border-radius:8px; padding:2px 8px; }
-  .prow .hotel.swap { background:rgba(167,139,250,.18); border:1px solid rgba(167,139,250,.45); }
-  #cursor { position:fixed; width:22px; height:22px; z-index:38; pointer-events:none; opacity:0; transition:all .9s cubic-bezier(.4,.1,.3,1); filter:drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
-  #allocbtn { display:inline-block; margin-top:2.4vh; background:linear-gradient(92deg,#7c96ff,#a78bfa); color:#0b0f1e;
-    padding:11px 26px; border-radius:11px; font-weight:700; font-size:clamp(13px,1.5vw,16px); opacity:0; transition:all .4s; transform:scale(.9); }
+  .prow .hotel { transition:all .4s; border-radius:8px; padding:2px 9px; }
+  .prow .hotel.swap { background:rgba(167,139,250,.2); border:1px solid rgba(167,139,250,.5); }
+  #cursor { position:fixed; width:22px; height:22px; z-index:38; pointer-events:none; opacity:0;
+    transition:all .9s cubic-bezier(.4,.1,.3,1); filter:drop-shadow(0 2px 6px rgba(0,0,0,.6)); }
+  #allocbtn { display:inline-block; margin-top:2.6vh; background:var(--grad); color:#0b0f1e; padding:12px 28px;
+    border-radius:12px; font-weight:700; font-family:"Sora",sans-serif; font-size:clamp(13px,1.5vw,16px); opacity:0; transition:all .4s; transform:scale(.9); }
   #allocbtn.in { opacity:1; transform:none; }
-  #allocbtn.pressed { transform:scale(.94); box-shadow:0 0 50px rgba(124,150,255,.7); }
-  #flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:45; }
-  #logo6 { opacity:0; transform:scale(.75); transition:all .9s cubic-bezier(.2,.9,.3,1.15); text-align:center; }
-  #logo6.show { opacity:1; transform:none; }
+  #allocbtn.pressed { transform:scale(.94); box-shadow:0 0 55px rgba(124,150,255,.75); }
+  #ledgerline { margin-top:2.2vh; font-size:clamp(11px,1.2vw,13.5px); color:var(--faint); font-family:ui-monospace,Menlo,monospace;
+    opacity:0; transition:opacity .6s; }
+  #ledgerline.show { opacity:1; }
+  #ledgerline b { color:var(--ok); }
+
+  /* ---------- outro ---------- */
+  #logo7 { opacity:0; transform:scale(.78); transition:all 1s cubic-bezier(.2,.9,.3,1.12); text-align:center; }
+  #logo7.show { opacity:1; transform:none; }
+
+  @media (prefers-reduced-motion: reduce) { #world, .kl, .h2, .oc, .prow { transition-duration:.01s !important; } }
 </style>
 </head>
 <body>
-<div id="bar"></div>
+<div id="bgfx"><div class="blob b1"></div><div class="blob b2"></div></div>
+<div id="bar"></div><div id="marks"></div>
 <div id="flash"></div>
 
 <div id="gate">
-  <div class="ghost-bars"><div class="gb" style="height:88%"></div><div class="gb" style="height:64%"></div><div class="gb" style="height:46%"></div></div>
-  <h1><b>How the allocation engine thinks</b><br>Organisation A · B · C — one worked example</h1>
-  <button id="play">▶</button>
-  <p>~70 seconds · sound on 🔊</p>
+  <div class="ghost">
+    <div class="gb" style="height:96%"><i></i></div>
+    <div class="gb" style="height:72%"><i></i></div>
+    <div class="gb" style="height:72%"><i></i></div>
+  </div>
+  <h1><b>How the allocation engine thinks</b><br>70 rooms · 100 requested — one worked example</h1>
+  <button id="play" aria-label="Play">▶</button>
+  <p>~95 seconds · subtitles always on · sound recommended 🔊</p>
 </div>
 
-<div id="stage" style="position:fixed; inset:0">
+<div id="stage" style="position:fixed; inset:0; z-index:1">
   <div id="world"></div>
 </div>
 <div id="cap"></div>
@@ -116,212 +188,375 @@
 <script>
 'use strict';
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 const world = $('#world');
 const scenes = [];
-for (let i = 0; i < 6; i++) { const s = document.createElement('div'); s.className = 'scene'; world.appendChild(s); scenes.push(s); }
+for (let i = 0; i < 8; i++) { const s = document.createElement('div'); s.className = 'scene'; world.appendChild(s); scenes.push(s); }
 
-// S0 — meet the engine
+/* ============ the worked example (single night, one property pool) ============
+   Demands: A 40 · B 30 · C 30  (ranking A > B > C) — capacity 70.
+   Pass A (floor 30%): A +12, B +9, C +9  → 30 used, 40 left.
+   Pass B (ranking):   A +28 → 40 FULL · B +12 → 21 (70%) · C stays 9 (floor).
+   Without the floor:  A 40 · B 30 · C 0.                                        */
+const EX = { cap: 70, orgs: [
+  { id: 'A', want: 40, floor: 12, final: 40 },
+  { id: 'B', want: 30, floor: 9,  final: 21 },
+  { id: 'C', want: 30, floor: 9,  final: 9  }] };
+
+/* ---------------- scenes ---------------- */
+// S0 hook
 scenes[0].innerHTML = `<div class="k">
   <span class="kl">Three organisations.</span>
-  <span class="kl g">One scarce inventory.</span>
-  <span class="kl small" style="margin-top:2.5vh">Here is how the acmOS engine decides — and how you stay in charge.</span></div>`;
+  <span class="kl g">70 rooms. 100 requested.</span>
+  <span class="kl small" style="margin-top:2.6vh">This is how the acmOS engine decides — and how you stay in charge.</span></div>`;
 
-// S1 — the requests arrive
-scenes[1].innerHTML = `<div style="text-align:center">
-  <div class="k" style="margin-bottom:4vh"><span class="kl" style="font-size:clamp(20px,3.4vw,42px)">Each organisation tells the engine what it needs.</span></div>
-  <div style="display:flex; gap:2.5vw; justify-content:center">
-    ${['A', 'B', 'C'].map((o) => `<div class="orgcard" id="org${o}">
-      <h4>Organisation ${o}</h4>
+// S1 requests
+scenes[1].innerHTML = `<div class="kick">The input</div>
+  <div class="h2">Each organisation tells the engine what it needs.</div>
+  <div class="cards">${EX.orgs.map((o, i) => `
+    <div class="oc" id="oc${o.id}">
+      <span class="rk">${i + 1}${['st', 'nd', 'rd'][i]} in your ranking</span>
+      <h4><span class="dot"></span>Organisation ${o.id}</h4>
+      <div class="want num">${o.want} rooms<small>for the same night</small></div>
       <div class="ln">Ranked properties: <b>1st · 2nd · 3rd choice</b></div>
-      <div class="ln">Demand: <b>rooms &amp; guests, night by night</b></div>
-      <div class="ln">Room mix: <b>Doubles · single-use · Suites</b></div>
-    </div>`).join('')}
-  </div></div>`;
+      <div class="ln">Demand: <b>night by night</b> · Mix: <b>Doubles · DUS · Suites</b></div>
+    </div>`).join('')}</div>
+  <div id="totchip"><span class="num">100 requested</span> · <span class="num">only 70 available</span></div>`;
 
-// S2 — what the engine considers
-scenes[2].innerHTML = `<div style="text-align:center">
-  <div class="k" style="margin-bottom:4vh"><span class="kl" style="font-size:clamp(20px,3.4vw,42px)">The engine weighs four things you control.</span></div>
+// S2 levers
+scenes[2].innerHTML = `<div class="kick">The rules — all four are yours</div>
+  <div class="h2">The engine weighs four things you control.</div>
   <div class="consider" id="cons">
-    <div><span class="ic">🏆</span><span><b>Your ranking</b> — who is served first. Never first-come-first-served.</span></div>
-    <div><span class="ic">📏</span><span><b>Entitlements</b> — a hard cap on what each organisation may draw.</span></div>
-    <div><span class="ic">🧱</span><span><b>Group blocks</b> — rooms reserved per client group; nobody crosses them.</span></div>
-    <div><span class="ic">⚖</span><span><b>The fairness floor</b> — a guaranteed share for everyone, before winners win.</span></div>
-  </div></div>`;
+    <div><span class="ic">🏆</span><span><b>Your ranking</b><small>Who is served first. Never first-come-first-served.</small></span></div>
+    <div><span class="ic">📏</span><span><b>Entitlements</b><small>A hard cap on what each organisation may draw.</small></span></div>
+    <div><span class="ic">🧱</span><span><b>Group blocks</b><small>Rooms reserved per client group — nobody crosses them.</small></span></div>
+    <div><span class="ic">⚖️</span><span><b>The fairness floor</b><small>A guaranteed share of each request, before winners win.</small></span></div>
+  </div>`;
 
-// S3 — fairness in action (A, B, C — same group)
-scenes[3].innerHTML = `<div style="text-align:center; position:relative">
-  <div class="k" style="margin-bottom:4vh"><span class="kl" style="font-size:clamp(20px,3.4vw,42px)">Fairness first. <span style="color:var(--amber)">Then the ranking.</span></span></div>
-  <div class="fw" id="fw" style="display:inline-flex">
-    <div id="fline"><span>guaranteed floor</span></div>
-  </div></div>`;
-[['A', '1st in ranking'], ['B', '2nd in ranking'], ['C', '3rd in ranking']].forEach(([o, sub]) => {
-  const c = document.createElement('div'); c.className = 'fc';
-  c.innerHTML = `<div class="ft"><div class="ff"></div><div class="fu"></div></div><div class="fl">${o}<small>${sub}</small></div>`;
-  $('#fw').insertBefore(c, $('#fline'));
-});
+// S3+S4 lab (bars + tank) — built once, reused across pass A / pass B
+const labHTML = (idPrefix) => `
+  <div class="lab">
+    <div class="bars">${EX.orgs.map((o) => `
+      <div class="bcol">
+        <div class="tube" id="${idPrefix}t${o.id}" style="height:${o.want / EX.orgs[0].want * 74}%">
+          <div class="fmark" id="${idPrefix}fm${o.id}"></div>
+          <div class="cnt" id="${idPrefix}c${o.id}"><span class="num">0</span><small>of ${o.want}</small></div>
+          <div class="fill" id="${idPrefix}f${o.id}"></div>
+          <div class="tup" id="${idPrefix}u${o.id}"></div>
+        </div>
+        <div class="blab">${o.id}<small>wants ${o.want}</small></div>
+        <div class="chip" id="${idPrefix}ch${o.id}"></div>
+      </div>`).join('')}
+    </div>
+    <div class="tank">
+      <div class="tk"><div class="tkf" id="${idPrefix}tkf"></div>
+        <div class="tkn"><span class="num" id="${idPrefix}tkn">70</span><small>ROOMS LEFT</small></div></div>
+      <div class="tklab">inventory</div>
+    </div>
+  </div>`;
 
-// S4 — the proposal + user interaction
-scenes[4].innerHTML = `<div style="text-align:center; width:100%">
-  <div class="k" style="margin-bottom:3vh"><span class="kl" style="font-size:clamp(20px,3.4vw,42px)">A proposal — with reasons. Not a decision.</span></div>
-  <div class="prow" id="pA"><span class="tick"></span><b>A</b><span class="hotel">→ its 1st choice</span><span class="why">preference honoured · FULL</span></div>
-  <div class="prow" id="pB"><span class="tick"></span><b>B</b><span class="hotel">→ its 2nd choice</span><span class="why">1st choice full · FULL</span></div>
-  <div class="prow" id="pC"><span class="tick"></span><b>C</b><span class="hotel" id="cHotel">→ closest alternative</span><span class="why alt">similar price &amp; distance</span></div>
-  <a id="allocbtn">✔ Allocate approved rows</a></div>`;
+scenes[3].innerHTML = `<div class="kick">Pass one — the guarantee</div>
+  <div class="h2">Fairness floor: <span class="am">30% of each request</span> is granted first.</div>
+  ${labHTML('a')}`;
 
-// S5 — outro
-scenes[5].innerHTML = `<div id="logo6">
-  <svg width="76" height="76" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0b0f1e" stroke="rgba(255,255,255,.2)"/><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b7cfa"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs><path d="M16 6l2.2 6.4L25 14l-6.8 1.6L16 22l-2.2-6.4L7 14l6.8-1.6z" fill="url(#lg2)"/><circle cx="24" cy="8" r="2" fill="#ffb454"/></svg>
-  <div style="font-family:'Sora'; font-weight:800; font-size:clamp(26px,4vw,40px); margin-top:12px">acm<span style="background:linear-gradient(92deg,#7c96ff,#a78bfa);-webkit-background-clip:text;background-clip:text;color:transparent">OS</span></div>
-  <div style="color:var(--dim); font-size:clamp(13px,1.6vw,16px); margin-top:8px">The engine proposes. Your team decides.<br>Nothing is written until you approve.</div></div>`;
+scenes[4].innerHTML = `<div class="kick">Pass two — the ranking</div>
+  <div class="h2">Above the floor, <span class="gr">your ranking</span> tops everyone up — until the rooms run out.</div>
+  ${labHTML('b')}`;
 
-/* ---------- music & sfx (synthesized, no assets) ---------- */
-let AC, musGain, sfxGain, musicOn = true, voiceOn = true;
+// S5 counterfactual
+scenes[5].innerHTML = `<div class="kick">Why the floor matters</div>
+  <div class="h2" id="cfTitle">Turn the floor off, and C gets <span style="color:var(--bad)">nothing</span>.</div>
+  ${labHTML('x')}`;
+
+// S6 proposal + human control
+scenes[6].innerHTML = `<div class="kick">The output</div>
+  <div class="h2">A proposal — with a reason on every line. Not a decision.</div>
+  <div style="margin-top:3vh; width:100%">
+  <div class="prow" id="pA"><span class="tick"></span><b>A</b><span class="hotel num">→ 1st choice · 40 of 40</span><span class="why">ranking honoured · FULL</span></div>
+  <div class="prow" id="pB"><span class="tick"></span><b>B</b><span class="hotel num">→ 1st choice · 21 of 30</span><span class="why alt">inventory ran out · 70%</span></div>
+  <div class="prow" id="pC"><span class="tick"></span><b>C</b><span class="hotel num" id="cHotel">→ 1st choice · 9 of 30</span><span class="why alt">fairness floor kept</span></div>
+  <div style="text-align:center"><a id="allocbtn">✔ Allocate approved rows</a>
+  <div id="ledgerline">ledger ► ALLOCATE +40 · +21 · +9 — <b>by ops@yourteam · 14:02:31 · auditable</b></div></div></div>`;
+
+// S7 outro
+scenes[7].innerHTML = `<div id="logo7">
+  <svg width="80" height="80" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0b0f1e" stroke="rgba(255,255,255,.2)"/><defs><linearGradient id="lg2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5b7cfa"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs><path d="M16 6l2.2 6.4L25 14l-6.8 1.6L16 22l-2.2-6.4L7 14l6.8-1.6z" fill="url(#lg2)"/><circle cx="24" cy="8" r="2" fill="#ffb454"/></svg>
+  <div style="font-family:'Sora'; font-weight:800; font-size:clamp(27px,4vw,42px); margin-top:14px">acm<span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">OS</span></div>
+  <div style="color:var(--dim); font-size:clamp(13px,1.6vw,17px); margin-top:10px">The engine proposes. Your team decides.<br>Nothing is written until you approve.</div></div>`;
+
+/* ================= AUDIO — ambient score, reverb, ducking ================= */
+let AC = null, master, musGain, duck, sfxGain, wet, musicOn = true, voiceOn = true;
+const MVOL = .5;
 function audioInit() {
-  AC = new (window.AudioContext || window.webkitAudioContext)();
-  const master = AC.createDynamicsCompressor(); master.connect(AC.destination);
-  musGain = AC.createGain(); musGain.gain.value = .45; musGain.connect(master);
-  sfxGain = AC.createGain(); sfxGain.gain.value = .65; sfxGain.connect(master);
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createDynamicsCompressor();
+    master.threshold.value = -20; master.knee.value = 24; master.ratio.value = 5; master.connect(AC.destination);
+    duck = AC.createGain(); duck.gain.value = 1; duck.connect(master);            // narration ducking
+    musGain = AC.createGain(); musGain.gain.value = MVOL; musGain.connect(duck);  // music bus
+    sfxGain = AC.createGain(); sfxGain.gain.value = .5; sfxGain.connect(master);  // sfx (not ducked)
+    // generated impulse response → lush reverb, no assets
+    const dur = 2.6, rate = AC.sampleRate, ir = AC.createBuffer(2, rate * dur, rate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2.6); }
+    const conv = AC.createConvolver(); conv.buffer = ir;
+    wet = AC.createGain(); wet.gain.value = .5; wet.connect(conv); conv.connect(musGain);
+  } catch (e) { AC = null; }
 }
-const BPM = 96, SPB = 60 / BPM;
-const kick = (t) => { const o = AC.createOscillator(), g = AC.createGain();
-  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(46, t + .12);
-  g.gain.setValueAtTime(.8, t); g.gain.exponentialRampToValueAtTime(.001, t + .24);
-  o.connect(g).connect(musGain); o.start(t); o.stop(t + .3); };
-const hat = (t, v = .09) => { const b = AC.createBuffer(1, 2000, 44100), d = b.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
-  const s = AC.createBufferSource(); s.buffer = b;
-  const f = AC.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 8500;
-  const g = AC.createGain(); g.gain.value = v;
-  s.connect(f).connect(g).connect(musGain); s.start(t); };
-const bass = (t, fr) => { const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
-  o.type = 'sawtooth'; o.frequency.value = fr; f.type = 'lowpass'; f.frequency.value = 280;
-  g.gain.setValueAtTime(.24, t); g.gain.exponentialRampToValueAtTime(.001, t + SPB * .9);
-  o.connect(f).connect(g).connect(musGain); o.start(t); o.stop(t + SPB); };
-const pad = (t, freqs, dur, v = .06) => freqs.forEach((fr) => [0, 4].forEach((det) => {
+const NOTE = { F2:87.31, G2:98, A2:110, C3:130.81, E3:164.81, F3:174.61, G3:196, A3:220, B3:246.94,
+  C4:261.63, D4:293.66, E4:329.63, F4:349.23, G4:392, A4:440, B4:493.88, C5:523.25, D5:587.33, E5:659.25, G5:783.99 };
+const BPM = 84, SPB = 60 / BPM, BAR = SPB * 4;
+// progression: F△9 → Am7 → C△9 → G6 (2 bars each)
+const PROG = [
+  { sub: NOTE.F2, pad: [NOTE.F3, NOTE.A3, NOTE.C4, NOTE.E4], arp: [NOTE.F4, NOTE.A4, NOTE.C5, NOTE.G4] },
+  { sub: NOTE.A2, pad: [NOTE.A3, NOTE.C4, NOTE.E4, NOTE.G4], arp: [NOTE.E4, NOTE.A4, NOTE.B4, NOTE.C5] },
+  { sub: NOTE.C3, pad: [NOTE.G3, NOTE.C4, NOTE.E4, NOTE.B4], arp: [NOTE.G4, NOTE.C5, NOTE.D5, NOTE.E5] },
+  { sub: NOTE.G2, pad: [NOTE.G3, NOTE.B3, NOTE.D4, NOTE.E4], arp: [NOTE.D4, NOTE.G4, NOTE.B4, NOTE.E5] }];
+function padChord(t, chord, dur) { // warm triangles + sine sub, slow bloom, into reverb
+  chord.pad.forEach((fr) => [-4, 4].forEach((det) => {
+    const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
+    o.type = 'triangle'; o.frequency.value = fr; o.detune.value = det;
+    f.type = 'lowpass'; f.frequency.setValueAtTime(750, t); f.frequency.linearRampToValueAtTime(1900, t + dur * .6);
+    f.frequency.linearRampToValueAtTime(850, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(.045, t + 1.1); g.gain.linearRampToValueAtTime(0, t + dur);
+    o.connect(f); f.connect(g); g.connect(musGain); g.connect(wet); o.start(t); o.stop(t + dur + .1);
+  }));
+  const s = AC.createOscillator(), sg = AC.createGain();
+  s.type = 'sine'; s.frequency.value = chord.sub;
+  sg.gain.setValueAtTime(0, t); sg.gain.linearRampToValueAtTime(.16, t + .9); sg.gain.linearRampToValueAtTime(0, t + dur);
+  s.connect(sg).connect(musGain); s.start(t); s.stop(t + dur + .1);
+}
+let delayL = null;
+function pluck(t, fr, v = .12) { // soft pluck through ping-pong-ish delay
+  if (!delayL) { delayL = AC.createDelay(1); delayL.delayTime.value = SPB * .75;
+    const fb = AC.createGain(); fb.gain.value = .32; const dw = AC.createGain(); dw.gain.value = .3;
+    delayL.connect(fb); fb.connect(delayL); delayL.connect(dw); dw.connect(musGain); dw.connect(wet); }
   const o = AC.createOscillator(), g = AC.createGain(), f = AC.createBiquadFilter();
-  o.type = 'sawtooth'; o.frequency.value = fr; o.detune.value = det;
-  f.type = 'lowpass'; f.frequency.setValueAtTime(450, t); f.frequency.linearRampToValueAtTime(1700, t + dur * .7);
-  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + .7); g.gain.linearRampToValueAtTime(0, t + dur);
-  o.connect(f).connect(g).connect(musGain); o.start(t); o.stop(t + dur); }));
-const clack = () => { if (!AC) return; const t = AC.currentTime, b = AC.createBuffer(1, 1300, 44100), d = b.getChannelData(0);
+  o.type = 'triangle'; o.frequency.value = fr; f.type = 'lowpass'; f.frequency.value = 2600;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0008, t + .55);
+  o.connect(f); f.connect(g); g.connect(musGain); g.connect(wet); g.connect(delayL); o.start(t); o.stop(t + .6);
+}
+function heart(t) { // soft half-time heartbeat, not a club kick
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = 'sine'; o.frequency.setValueAtTime(96, t); o.frequency.exponentialRampToValueAtTime(38, t + .16);
+  g.gain.setValueAtTime(.5, t); g.gain.exponentialRampToValueAtTime(.001, t + .3);
+  o.connect(g).connect(musGain); o.start(t); o.stop(t + .35);
+}
+const chime = (fr = 1320, v = .1) => { if (!AC) return; const t = AC.currentTime;
+  const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.value = fr;
+  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + .6);
+  o.connect(g).connect(sfxGain); g.connect(wet ?? sfxGain); o.start(t); o.stop(t + .65); };
+const clack = () => { if (!AC) return; const t = AC.currentTime, b = AC.createBuffer(1, 1100, AC.sampleRate), d = b.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) ** 2;
   const s = AC.createBufferSource(); s.buffer = b;
-  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;
-  const g = AC.createGain(); g.gain.value = .7;
-  s.connect(f).connect(g).connect(sfxGain); s.start(t); };
-const chime = (fr = 1320, v = .11) => { if (!AC) return; const t = AC.currentTime;
-  const o = AC.createOscillator(), g = AC.createGain(); o.type = 'sine'; o.frequency.value = fr;
-  g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.001, t + .5);
-  o.connect(g).connect(sfxGain); o.start(t); o.stop(t + .5); };
-const CHORDS = [[110, 165, 220], [87.3, 130.8, 174.6], [130.8, 196, 261.6], [98, 147, 196]];
-const BLINE = [55, 55, 65.4, 73.4];
-let barCount = 0, t0 = 0;
+  const f = AC.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2100;
+  const g = AC.createGain(); g.gain.value = .5; s.connect(f); f.connect(g); g.connect(sfxGain); s.start(t); };
+const OUTRO_T = 88;                       // music resolves here
+let barCount = 0, t0m = 0;
 function scheduleBar() {
-  if (!musicOn) { barCount++; return; }
-  const L = SPB * 4, t = t0 + barCount * L, el = barCount * L;
-  if (el > 4) for (let b = 0; b < 4; b++) kick(t + b * SPB);
-  if (el > 10) for (let b = 0; b < 8; b++) hat(t + b * SPB / 2, b % 2 ? .09 : .045);
-  if (el > 10) for (let b = 0; b < 4; b++) bass(t + b * SPB, BLINE[barCount % 4] * (b % 2 ? 2 : 1));
-  if (el > 16) pad(t, CHORDS[barCount % 4], L * 1.05, el > 42 ? .08 : .055);
+  const t = t0m + barCount * BAR, el = barCount * BAR;
+  if (el > OUTRO_T) { barCount++; return; }
+  const chord = PROG[(barCount >> 1) % 4];
+  if (barCount % 2 === 0) padChord(t, chord, BAR * 2.15);
+  if (el > 17 && el < OUTRO_T - 3)        // arpeggio enters with the rules, rests during outro
+    [0, 1.5, 2, 3, 3.5].forEach((b, i) => { if ((barCount + i) % 3 !== 2) pluck(t + b * SPB, chord.arp[i % 4], .09); });
+  if (el > 31 && el < OUTRO_T - 5) { heart(t); heart(t + 2 * SPB); }   // heartbeat from pass one
   barCount++;
 }
+function musicEnd() { // final cadence + fade
+  if (!AC) return; const t = AC.currentTime;
+  padChord(t, PROG[2], 6); chime(NOTE.C5 * 2, .12); setTimeout(() => chime(NOTE.G5 * 2, .08), 350);
+  musGain.gain.setValueAtTime(musGain.gain.value, t + 3); musGain.gain.linearRampToValueAtTime(0, t + 7.5);
+}
 
-/* ---------- narration ---------- */
-let VOICE = null;
-function pickVoice() { const vs = speechSynthesis.getVoices();
-  VOICE = vs.find((v) => /en[-_](GB|US)/i.test(v.lang) && /natural|neural|aria|jenny|sonia|libby/i.test(v.name))
-       ?? vs.find((v) => /^en/i.test(v.lang)) ?? null; }
+/* ---------------- narration: cancel-before-speak (no queue drift) + ducking ---------------- */
+let VOICE = null, voiceLooksGood = false;
+function pickVoice() {
+  const vs = speechSynthesis.getVoices();
+  VOICE = vs.find((v) => /en[-_](GB|US)/i.test(v.lang) && /online.*natural|natural.*online/i.test(v.name))
+       ?? vs.find((v) => /en[-_](GB|US)/i.test(v.lang) && /neural|natural|aria|jenny|sonia|libby|ryan/i.test(v.name))
+       ?? vs.find((v) => /google (uk|us) english/i.test(v.name))
+       ?? vs.find((v) => /^en[-_]GB/i.test(v.lang)) ?? vs.find((v) => /^en/i.test(v.lang)) ?? null;
+  voiceLooksGood = !!VOICE && /natural|neural|google|aria|jenny|sonia|libby|ryan/i.test(VOICE.name);
+}
 if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-const say = (tx) => { if (!voiceOn || !('speechSynthesis' in window)) return;
-  const u = new SpeechSynthesisUtterance(tx); if (VOICE) u.voice = VOICE;
-  u.rate = 1.0; u.pitch = 1.0; speechSynthesis.speak(u); };
-const cap = (tx) => { $('#cap').textContent = tx; };
+function say(tx) {
+  if (!voiceOn || !('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();                       // the old film queued utterances → voice drifted off the visuals
+  const u = new SpeechSynthesisUtterance(tx);
+  if (VOICE) u.voice = VOICE;
+  u.rate = .97; u.pitch = 1;
+  if (AC && musGain) {
+    u.onstart = () => { const t = AC.currentTime; musGain.gain.cancelScheduledValues(t);
+      musGain.gain.setTargetAtTime(musicOn ? .22 : 0, t, .08); };                 // duck under the voice
+    u.onend = () => { const t = AC.currentTime;
+      musGain.gain.setTargetAtTime(musicOn ? MVOL : 0, t + .15, .3); };
+  }
+  speechSynthesis.speak(u);
+}
+let capTimer = null;
+function cap(tx, hold = 0) {  // subtitles: ALWAYS on — the film must work with sound off
+  const c = $('#cap'); clearTimeout(capTimer);
+  if (!tx) { c.classList.remove('on'); return; }
+  c.textContent = tx; c.classList.add('on');
+  if (hold) capTimer = setTimeout(() => c.classList.remove('on'), hold * 1000);
+}
+const tell = (tx) => { say(tx); cap(tx); };
 
-/* ---------- timeline ---------- */
+/* ---------------- helpers ---------------- */
 const goTo = (i) => { world.style.transform = `translateX(${-i * 100}vw)`; };
-const showK = (scene, i) => { const el = scenes[scene].querySelectorAll('.kl')[i]; if (el) { el.classList.add('show'); clack(); } };
-const flash = () => { const f = $('#flash'); f.style.transition = 'none'; f.style.opacity = .45;
-  requestAnimationFrame(() => { f.style.transition = 'opacity .5s'; f.style.opacity = 0; }); };
+const showK = (scene, sel, i = null) => {
+  const els = scenes[scene].querySelectorAll(sel);
+  (i == null ? els : [els[i]]).forEach((el) => el && el.classList.add('show'));
+  clack();
+};
+const flash = () => { const f = $('#flash'); f.style.transition = 'none'; f.style.opacity = .4;
+  requestAnimationFrame(() => { f.style.transition = 'opacity .55s'; f.style.opacity = 0; }); };
+const tween = (el, from, to, ms) => {
+  if (FROZEN) { el.textContent = to; return; }
+  const s = performance.now();
+  const step = (now) => { const p = Math.min(1, Math.max(0, (now - s) / ms));
+    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step); };
 const moveCursor = (x, y, show = true) => { const c = $('#cursor');
   c.style.opacity = show ? 1 : 0; c.style.left = x + 'px'; c.style.top = y + 'px'; };
-const centerOf = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width * .8, r.top + r.height * .5]; };
+const centerOf = (el) => { const r = el.getBoundingClientRect(); return [r.left + r.width * .82, r.top + r.height * .5]; };
+// lab controls (p = 'a' | 'b' | 'x')
+const setFill = (p, id, pct) => { $(`#${p}f${id}`).style.height = pct + '%'; };
+const setTop = (p, id, fromPct, addPct) => { const u = $(`#${p}u${id}`); u.style.bottom = fromPct + '%'; u.style.height = addPct + '%'; };
+const setCnt = (p, id, from, to, ms = 1300) => { const c = $(`#${p}c${id}`); c.style.opacity = 1; tween(c.querySelector('span'), from, to, ms); };
+const setChip = (p, id, cls, tx) => { const ch = $(`#${p}ch${id}`); ch.className = 'chip show ' + cls; ch.textContent = tx; };
+const setTank = (p, left, ms = 1400) => { $(`#${p}tkf`).style.height = (left / EX.cap * 100) + '%';
+  tween($(`#${p}tkn`), Number($(`#${p}tkn`).textContent), left, ms); };
+const showFloorMarks = (p) => EX.orgs.forEach((o) => { $(`#${p}fm${o.id}`).style.opacity = 1; });
+const primeLab = (p, state) => EX.orgs.forEach((o) => {   // pre-set a lab to a known state, no animation
+  const floorPct = 30, tube = $(`#${p}t${o.id}`);
+  tube.style.transition = 'none';
+  if (state === 'afterA') { setFill(p, o.id, floorPct); $(`#${p}c${o.id}`).style.opacity = 1;
+    $(`#${p}c${o.id}`).querySelector('span').textContent = o.floor; $(`#${p}fm${o.id}`).style.opacity = 1; }
+});
 
+/* ---------------- timeline ---------------- */
 const CUES = [
-  // S0 · 0–10s
-  [0.3, () => { showK(0, 0); say('Three organisations. One scarce inventory.'); }],
-  [1.9, () => showK(0, 1)],
-  [3.6, () => { showK(0, 2); say('Here is how the acm O S engine decides — and how you stay in charge.'); }],
-  // S1 · 10–24s — the requests
-  [9.0, () => { goTo(1); flash(); }],
-  [9.8, () => { showK(1, 0); say('Each organisation tells the engine what it needs:'); }],
-  [11.2, () => ['A', 'B', 'C'].forEach((o, i) => setTimeout(() => { $('#org' + o).classList.add('in'); clack(); }, i * 380))],
-  [13.2, () => { say('its properties in order of preference, its demand night by night, and its mix of room types.');
-    document.querySelectorAll('.orgcard .ln').forEach((l, i) => setTimeout(() => l.classList.add('show'), (i % 3) * 1400 + 200)); }],
-  [19.5, () => cap('Ranked preferences · per-night demand · room mix')],
-  // S2 · 24–40s — what it considers
-  [22.5, () => { goTo(2); flash(); cap(''); }],
-  [23.4, () => { showK(2, 0); say('The engine weighs four things — and you control all of them.'); }],
-  [26.0, () => { const rows = document.querySelectorAll('#cons > div');
-    const lines = ['Your ranking: who is served first. Never first come, first served.',
-      'Entitlements: a hard cap on what each organisation may draw.',
-      'Group blocks: rooms reserved per client group. Nobody crosses them.',
-      'And the fairness floor: a guaranteed share for everyone, before winners win.'];
-    rows.forEach((r, i) => setTimeout(() => { r.classList.add('show'); clack(); say(lines[i]); }, i * 3100)); }],
-  // S3 · 40–56s — fairness among A/B/C
-  [39.0, () => { goTo(3); flash(); cap(''); }],
-  [39.9, () => { showK(3, 0); say('Within the same group, fairness comes first.'); }],
-  [42.0, () => { $('#fline').style.opacity = 1; $('#fline').style.bottom = '45%';
-    document.querySelectorAll('.ff').forEach((f) => { f.style.height = '45%'; });
-    setTimeout(() => chime(660, .18), 1500);
-    say('Every organisation — first or last in the ranking — is guaranteed its share of its own request.');
-    cap('A, B and C all reach the guaranteed floor'); }],
-  [48.0, () => { say('Above the floor, your ranking rules: A tops up first, then B, then C — until the rooms run out.');
-    cap('Above the floor, the ranking decides the top-ups');
-    [['A', 55], ['B', 30], ['C', 10]].forEach(([o, extra], i) => setTimeout(() => {
-      const fu = document.querySelectorAll('.fu')[i];
-      fu.style.bottom = '45%'; fu.style.height = extra + '%'; chime(880 + i * 120, .09);
-    }, 700 + i * 700)); }],
-  // S4 · 56–74s — proposal + interaction
-  [55.0, () => { goTo(4); flash(); cap(''); }],
-  [55.9, () => { showK(4, 0); say('The result is a proposal — with a reason on every line. Not a decision.'); }],
-  [58.0, () => ['pA', 'pB', 'pC'].forEach((id, i) => setTimeout(() => { $('#' + id).classList.add('in'); clack(); }, i * 450))],
-  [61.0, () => { say('Your team reviews it. Disagree with a line? Move it.');
-    cap('Disagree with a line? Move it.');
+  // S0 · hook (0–8.5)
+  [0.4,  () => { showK(0, '.kl', 0); say('Three organisations. Seventy rooms. One hundred requested.'); cap('Three organisations · 70 rooms · 100 requested'); }],
+  [2.2,  () => showK(0, '.kl', 1)],
+  [4.2,  () => { showK(0, '.kl', 2); tell('This is how the acmOS engine decides — and how you stay in charge.'); }],
+  // S1 · requests (8.5–21)
+  [8.5,  () => { goTo(1); flash(); cap(''); }],
+  [9.2,  () => { showK(1, '.kick'); showK(1, '.h2'); tell('Each organisation submits what it needs — A wants forty rooms, B thirty, C thirty.'); }],
+  [10.6, () => EX.orgs.forEach((o, i) => setTimeout(() => { $('#oc' + o.id).classList.add('in'); clack(); }, i * 420))],
+  [13.8, () => { tell('With ranked properties, per-night demand, and a mix of room types.');
+    $$('.oc .ln').forEach((l, i) => setTimeout(() => l.classList.add('show'), (i % 2) * 900 + Math.floor(i / 2) * 250)); }],
+  [17.6, () => { $('#totchip').classList.add('in'); chime(880, .12);
+    tell('One hundred rooms requested. Only seventy exist. Someone decides — the question is how.'); }],
+  // S2 · levers (21–34)
+  [21.5, () => { goTo(2); flash(); cap(''); }],
+  [22.2, () => { showK(2, '.kick'); showK(2, '.h2'); say('The engine weighs four things — and you control all of them.'); cap('Four levers — all yours'); }],
+  [24.6, () => { const rows = $$('#cons > div');
+    const lines = ['Your ranking — who is served first. Never first come, first served.',
+      'Entitlements — a hard cap on what each organisation may draw.',
+      'Group blocks — rooms reserved per client group. Nobody crosses them.',
+      'And the fairness floor — a guaranteed share of each request, before winners win.'];
+    rows.forEach((r, i) => setTimeout(() => { r.classList.add('show'); tell(lines[i]); }, i * 2350)); }],
+  // S3 · PASS A (34–48)
+  [34.0, () => { goTo(3); flash(); cap(''); setTank('a', EX.cap, 1); }],
+  [34.7, () => { showK(3, '.kick'); showK(3, '.h2'); tell('Pass one. Before anyone wins, every organisation is guaranteed thirty percent of its own request.'); }],
+  [37.6, () => { showFloorMarks('a'); chime(660, .14); }],
+  [38.6, () => { EX.orgs.forEach((o, i) => setTimeout(() => {
+      setFill('a', o.id, 30); setCnt('a', o.id, 0, o.floor); chime(740 + i * 90, .07); }, i * 500));
+    setTimeout(() => setTank('a', 40), 500);
+    cap('A +12 · B +9 · C +9 — each reaches 30% of its own demand'); }],
+  [43.5, () => { EX.orgs.forEach((o) => setChip('a', o.id, 'amc', `floor · ${o.floor} of ${o.want}`));
+    tell('Twelve, nine and nine rooms are locked in. Forty remain.'); }],
+  // S4 · PASS B (48–62)
+  [48.0, () => { goTo(4); flash(); cap(''); primeLab('b', 'afterA'); setTank('b', 40, 1); }],
+  [48.7, () => { showK(4, '.kick'); showK(4, '.h2'); tell('Pass two. Above the floor, your ranking rules the top-ups.'); }],
+  [51.2, () => { setTop('b', 'A', 30, 70); setCnt('b', 'A', 12, 40); setTank('b', 12);
+    tell('A is first: topped up to all forty rooms. Full.'); }],
+  [53.9, () => setChip('b', 'A', 'okc', 'FULL · 40 of 40')],
+  [55.0, () => { setTop('b', 'B', 30, 40); setCnt('b', 'B', 9, 21); setTank('b', 0);
+    tell('B is next — twelve more rooms… and the inventory runs dry at twenty-one.'); }],
+  [58.2, () => { setChip('b', 'B', 'amc', '70% · 21 of 30'); setChip('b', 'C', 'amc', 'floor kept · 9');
+    tell('C keeps its guaranteed nine. Nobody leaves with zero.'); }],
+  // S5 · counterfactual (62–71)
+  [62.0, () => { goTo(5); flash(); cap(''); setTank('x', 0, 1);
+    // pure ranking outcome, pre-armed then animated
+    setTimeout(() => { setFill('x', 'A', 100); setCnt('x', 'A', 0, 40, 900);
+      setFill('x', 'B', 100); setCnt('x', 'B', 0, 30, 900);
+      setFill('x', 'C', 0); setCnt('x', 'C', 0, 0, 400); }, 750); }],
+  [62.7, () => { showK(5, '.kick'); showK(5, '.h2');
+    tell('Without the floor? Pure ranking: A takes forty, B takes thirty — and C gets nothing at all.'); }],
+  [65.8, () => { setChip('x', 'A', 'okc', 'FULL'); setChip('x', 'B', 'okc', 'FULL'); setChip('x', 'C', 'bdc', '✕ 0 rooms — locked out'); chime(220, .16); }],
+  [67.6, () => tell('With acmOS, scarcity is a policy you set — not an accident of timing.')],
+  // S6 · proposal + the human (71–87)
+  [71.0, () => { goTo(6); flash(); cap(''); }],
+  [71.7, () => { showK(6, '.kick'); showK(6, '.h2'); tell('The result is a proposal — with a reason on every line. Not a decision.'); }],
+  [74.2, () => ['pA', 'pB', 'pC'].forEach((id, i) => setTimeout(() => { $('#' + id).classList.add('in'); clack(); }, i * 430))],
+  [76.6, () => { tell('Your team reviews it. Disagree with a line? Move it.');
     const [x, y] = centerOf($('#cHotel')); moveCursor(x, y); }],
-  [63.6, () => { const h = $('#cHotel'); h.classList.add('swap'); h.textContent = '→ your pick in the cluster'; chime(990, .12);
+  [79.2, () => { const h = $('#cHotel'); h.classList.add('swap'); h.textContent = '→ your pick in the cluster · 9 of 30'; chime(990, .11);
     setTimeout(() => h.classList.remove('swap'), 900); }],
-  [65.0, () => { say('Approve what convinces you — and only then, allocate.');
-    cap('Approve — then allocate.');
-    document.querySelectorAll('.prow .tick').forEach((t, i) => setTimeout(() => { t.classList.add('on'); chime(1200 + i * 100, .08); }, i * 420));
+  [80.6, () => { tell('Approve what convinces you — and only then, allocate.');
+    $$('.prow .tick').forEach((t, i) => setTimeout(() => { t.classList.add('on'); chime(1180 + i * 110, .07); }, i * 420));
     $('#allocbtn').classList.add('in'); }],
-  [68.2, () => { const b = $('#allocbtn'); const [x, y] = centerOf(b); moveCursor(x, y); }],
-  [69.6, () => { $('#allocbtn').classList.add('pressed'); flash(); chime(1760, .16); moveCursor(0, 0, false);
-    say('Only your approval writes to the ledger — named, timestamped, auditable.'); }],
-  // S5 · 74–82s — outro
-  [73.0, () => { goTo(5); cap(''); }],
-  [73.9, () => { $('#logo6').classList.add('show'); chime(1320, .15); chime(1980, .1);
-    say('acm O S. The engine proposes. Your team decides.'); }],
-  [80.0, () => cap('')],
+  [83.6, () => { const [x, y] = centerOf($('#allocbtn')); moveCursor(x, y); }],
+  [85.0, () => { $('#allocbtn').classList.add('pressed'); flash(); chime(1760, .14); moveCursor(0, 0, false);
+    $('#ledgerline').classList.add('show');
+    tell('Only your approval writes to the ledger — named, timestamped, auditable.'); }],
+  // S7 · outro (88.5–96)
+  [88.5, () => { goTo(7); cap(''); musicEnd(); }],
+  [89.4, () => { $('#logo7').classList.add('show'); chime(1320, .13); setTimeout(() => chime(1980, .09), 300);
+    tell('acmOS. The engine proposes. Your team decides.'); }],
+  [94.5, () => cap('')],
 ];
-const TOTAL = 82;
+const TOTAL = 96;
 
-let cueIx = 0, ticker = null, musicTimer = null;
-function start() {
+/* progress markers at scene changes */
+[8.5, 21.5, 34, 48, 62, 71, 88.5].forEach((t) => {
+  const i = document.createElement('i'); i.style.left = (t / TOTAL * 100) + '%'; $('#marks').appendChild(i);
+});
+
+let cueIx = 0, ticker = null, musicTimer = null, tStart = 0;
+const nowS = () => AC ? AC.currentTime : performance.now() / 1000;
+function start(seekTo = 0) {
   audioInit();
+  if ('speechSynthesis' in window && !voiceLooksGood) {      // robotic voice detected → captions carry the words
+    voiceOn = false; $('#vox').textContent = 'voice ✕';
+  }
   $('#gate').style.display = 'none'; $('#hud').style.display = 'flex';
-  t0 = AC.currentTime + .1; barCount = 0; cueIx = 0;
-  musicTimer = setInterval(() => { if (t0 + barCount * SPB * 4 < AC.currentTime + 1.2) scheduleBar(); }, 200);
+  tStart = nowS() + .1 - seekTo; barCount = Math.max(0, Math.floor(seekTo / BAR)); cueIx = 0;
+  if (seekTo > 0) { world.style.transition = 'none';
+    while (cueIx < CUES.length && CUES[cueIx][0] < seekTo) { try { CUES[cueIx][1](); } catch (e) {} cueIx++; }
+    setTimeout(() => { world.style.transition = ''; }, 60); }
+  if (FROZEN) { $('#bar').style.width = Math.min(100, seekTo / TOTAL * 100) + '%'; return; }
+  if (AC) { t0m = tStart; musicTimer = setInterval(() => { if (t0m + barCount * BAR < AC.currentTime + 1.4) scheduleBar(); }, 220); }
   ticker = setInterval(() => {
-    const el = AC.currentTime - t0;
+    const el = nowS() - tStart;
     $('#bar').style.width = Math.min(100, el / TOTAL * 100) + '%';
     while (cueIx < CUES.length && CUES[cueIx][0] <= el) { try { CUES[cueIx][1](); } catch (e) { console.error(e); } cueIx++; }
     if (el > TOTAL) { clearInterval(ticker); clearInterval(musicTimer); }
   }, 50);
 }
-$('#gate').onclick = start;
+$('#gate').onclick = () => start(0);
 $('#restart').onclick = () => location.reload();
-$('#mus').onclick = (e) => { e.stopPropagation(); musicOn = !musicOn; if (musGain) musGain.gain.value = musicOn ? .45 : 0; e.target.textContent = musicOn ? 'music ✓' : 'music ✕'; };
-$('#vox').onclick = (e) => { e.stopPropagation(); voiceOn = !voiceOn; if (!voiceOn) speechSynthesis.cancel(); e.target.textContent = voiceOn ? 'voice ✓' : 'voice ✕'; };
+$('#mus').onclick = (e) => { e.stopPropagation(); musicOn = !musicOn;
+  if (musGain && AC) musGain.gain.setTargetAtTime(musicOn ? MVOL : 0, AC.currentTime, .1);
+  e.target.textContent = musicOn ? 'music ✓' : 'music ✕'; };
+$('#vox').onclick = (e) => { e.stopPropagation(); voiceOn = !voiceOn;
+  if (!voiceOn && 'speechSynthesis' in window) speechSynthesis.cancel();
+  e.target.textContent = voiceOn ? 'voice ✓' : 'voice ✕'; };
+// dev/test: ?seek=42 jumps straight to t=42 (muted visual check); &snap=1 kills transitions
+const qp = new URLSearchParams(location.search);
+let FROZEN = false;
+if (qp.has('seek')) {
+  FROZEN = true;
+  if (qp.has('snap')) { const st = document.createElement('style');
+    st.textContent = '*{transition:none!important;animation:none!important}'; document.head.appendChild(st); }
+  const origInit = audioInit; audioInit = () => {}; // deterministic clock for screenshots
+  window.addEventListener('load', () => setTimeout(() => start(Number(qp.get('seek')) || 0), 100));
+}
 </script>
 </body>
 </html>
